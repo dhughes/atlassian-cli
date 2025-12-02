@@ -43,11 +43,14 @@ var metaSearchCmd = &cobra.Command{
 	Short: "Search across Jira and Confluence (Rovo search)",
 	Long: `Perform a unified search across both Jira and Confluence using Rovo search.
 
-Note: This requires Rovo to be enabled and may not work with all Atlassian setups.
+NOTE: Rovo search does not have a public REST API. This command is NOT FUNCTIONAL
+with Basic Auth (API tokens). The MCP server uses OAuth or internal endpoints.
 
-Examples:
-  atl meta search "authentication"
-  atl meta search "FX project documentation"`,
+For functional search, use:
+  - atl jira search-jql for Jira
+  - atl confluence search-cql for Confluence
+
+This command is included for MCP parity but will not work.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runMetaSearch,
 }
@@ -57,11 +60,14 @@ var metaFetchCmd = &cobra.Command{
 	Short: "Fetch a resource by ARI",
 	Long: `Fetch any Atlassian resource by its ARI (Atlassian Resource Identifier).
 
-ARI format: ari:cloud:<product>:<cloudId>:<resource-type>/<resource-id>
+NOTE: There is no generic "fetch by ARI" endpoint in the Atlassian REST API.
+This command is a placeholder for MCP parity.
 
-Examples:
-  atl meta fetch "ari:cloud:jira:abc123:issue/10107"
-  atl meta fetch "ari:cloud:confluence:abc123:page/123456789"`,
+Instead, use the product-specific commands:
+  - atl jira get-issue <key> for Jira issues
+  - atl confluence get-page <id> for Confluence pages
+
+This command is included for MCP parity but is not implemented.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runMetaFetch,
 }
@@ -166,85 +172,10 @@ func runMetaGetResources(cmd *cobra.Command, args []string) error {
 }
 
 func runMetaSearch(cmd *cobra.Command, args []string) error {
-	query := args[0]
-
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	account, err := cfg.GetActiveAccount()
-	if err != nil {
-		return fmt.Errorf("not logged in. Run 'atl auth login' first")
-	}
-
-	client := atlassian.NewClient(account.Email, account.Token, account.Site)
-
-	result, err := client.RovoSearch(query)
-	if err != nil {
-		return fmt.Errorf("failed to search: %w\n\nNote: Rovo search may not be available on all Atlassian instances", err)
-	}
-
-	if outputJSON {
-		output, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to format output: %w", err)
-		}
-		fmt.Println(string(output))
-	} else {
-		results, _ := result["results"].([]interface{})
-
-		if len(results) == 0 {
-			fmt.Println("No results found.")
-			return nil
-		}
-
-		fmt.Printf("Found results:\n\n")
-
-		for i, item := range results {
-			if res, ok := item.(map[string]interface{}); ok {
-				title, _ := res["title"].(string)
-				resType, _ := res["type"].(string)
-				url, _ := res["url"].(string)
-
-				fmt.Printf("%d. %s\n", i+1, title)
-				fmt.Printf("   Type: %s\n", resType)
-				if url != "" {
-					fmt.Printf("   URL: %s\n", url)
-				}
-				fmt.Println()
-			}
-		}
-	}
-
-	return nil
+	return fmt.Errorf("Rovo search is not available via REST API with Basic Auth.\n\nThe MCP server uses OAuth or internal endpoints not accessible with API tokens.\n\nAlternatives:\n  - Use 'atl jira search-jql' for Jira issues\n  - Use 'atl confluence search-cql' for Confluence pages\n\nSee: https://community.atlassian.com/forums/Rovo-questions/Is-there-API-Rest-access-to-Rovo/qaq-p/3037848")
 }
 
 func runMetaFetch(cmd *cobra.Command, args []string) error {
-	ari := args[0]
-
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	account, err := cfg.GetActiveAccount()
-	if err != nil {
-		return fmt.Errorf("not logged in. Run 'atl auth login' first")
-	}
-
-	client := atlassian.NewClient(account.Email, account.Token, account.Site)
-
-	result, err := client.FetchByARI(ari)
-	if err != nil {
-		return fmt.Errorf("failed to fetch: %w", err)
-	}
-
-	output, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to format output: %w", err)
-	}
-	fmt.Println(string(output))
-
-	return nil
+	_ = args[0] // ari parameter exists but unused
+	return fmt.Errorf("Generic fetch by ARI is not implemented.\n\nThere is no single REST API endpoint for fetching resources by ARI.\n\nInstead, use product-specific commands:\n  - For Jira issues: atl jira get-issue <key>\n  - For Confluence pages: atl confluence get-page <id>\n\nThe MCP server likely parses ARIs and routes to appropriate endpoints.")
 }
