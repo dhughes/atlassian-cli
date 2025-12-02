@@ -161,13 +161,24 @@ func init() {
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateType, "type", "", "Issue type (required, e.g., Task, Bug, Story)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateSummary, "summary", "", "Issue summary (required)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateDescription, "description", "", "Issue description")
+	jiraCreateIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	jiraCreateIssueCmd.MarkFlagRequired("project")
 	jiraCreateIssueCmd.MarkFlagRequired("type")
 	jiraCreateIssueCmd.MarkFlagRequired("summary")
 
+	// Flags for add-comment
+	jiraAddCommentCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
 	// Flags for edit-issue
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditSummary, "summary", "", "New summary")
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditDescription, "description", "", "New description")
+	jiraEditIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-transitions
+	jiraGetTransitionsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for transition-issue
+	jiraTransitionIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -436,20 +447,29 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create issue: %w", err)
 	}
 
-	// Extract key from response
-	key, _ := result["key"].(string)
-	id, _ := result["id"].(string)
+	if outputJSON {
+		// JSON output
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		key, _ := result["key"].(string)
+		id, _ := result["id"].(string)
 
-	// Construct web URL
-	webURL := fmt.Sprintf("%s/browse/%s", account.Site, key)
-	if !strings.HasPrefix(account.Site, "http") {
-		webURL = "https://" + webURL
+		// Construct web URL
+		webURL := fmt.Sprintf("%s/browse/%s", account.Site, key)
+		if !strings.HasPrefix(account.Site, "http") {
+			webURL = "https://" + webURL
+		}
+
+		fmt.Printf("✓ Created issue: %s\n", key)
+		fmt.Printf("  ID: %s\n", id)
+		fmt.Printf("  Link: %s\n", webURL)
+		fmt.Printf("\nView details: atl jira get-issue %s\n", key)
 	}
-
-	fmt.Printf("✓ Created issue: %s\n", key)
-	fmt.Printf("  ID: %s\n", id)
-	fmt.Printf("  Link: %s\n", webURL)
-	fmt.Printf("\nView details: atl jira get-issue %s\n", key)
 
 	return nil
 }
@@ -478,9 +498,19 @@ func runJiraAddComment(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to add comment: %w", err)
 	}
 
-	id, _ := result["id"].(string)
-	fmt.Printf("✓ Added comment to %s\n", issueKey)
-	fmt.Printf("  Comment ID: %s\n", id)
+	if outputJSON {
+		// JSON output
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		id, _ := result["id"].(string)
+		fmt.Printf("✓ Added comment to %s\n", issueKey)
+		fmt.Printf("  Comment ID: %s\n", id)
+	}
 
 	return nil
 }
@@ -539,12 +569,27 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to edit issue: %w", err)
 	}
 
-	fmt.Printf("✓ Updated issue %s\n", issueKey)
-	if jiraEditSummary != "" {
-		fmt.Printf("  Summary: %s\n", jiraEditSummary)
-	}
-	if jiraEditDescription != "" {
-		fmt.Printf("  Description: updated\n")
+	if outputJSON {
+		// JSON output - API returns 204 No Content
+		response := map[string]interface{}{
+			"status":  204,
+			"success": true,
+			"message": "Issue updated successfully",
+		}
+		output, err := json.MarshalIndent(response, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		fmt.Printf("✓ Updated issue %s\n", issueKey)
+		if jiraEditSummary != "" {
+			fmt.Printf("  Summary: %s\n", jiraEditSummary)
+		}
+		if jiraEditDescription != "" {
+			fmt.Printf("  Description: updated\n")
+		}
 	}
 
 	return nil
@@ -573,33 +618,43 @@ func runJiraGetTransitions(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get transitions: %w", err)
 	}
 
-	transitions, _ := result["transitions"].([]interface{})
-
-	if len(transitions) == 0 {
-		fmt.Printf("No transitions available for %s\n", issueKey)
-		return nil
-	}
-
-	fmt.Printf("Available transitions for %s:\n\n", issueKey)
-
-	for _, t := range transitions {
-		if trans, ok := t.(map[string]interface{}); ok {
-			id, _ := trans["id"].(string)
-			name, _ := trans["name"].(string)
-
-			// Get destination status
-			to, _ := trans["to"].(map[string]interface{})
-			toName, _ := to["name"].(string)
-
-			fmt.Printf("  ID: %-4s  → %s", id, name)
-			if toName != "" {
-				fmt.Printf(" (to: %s)", toName)
-			}
-			fmt.Println()
+	if outputJSON {
+		// JSON output
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
 		}
-	}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		transitions, _ := result["transitions"].([]interface{})
 
-	fmt.Printf("\nTo transition: atl jira transition-issue %s <transition-id>\n", issueKey)
+		if len(transitions) == 0 {
+			fmt.Printf("No transitions available for %s\n", issueKey)
+			return nil
+		}
+
+		fmt.Printf("Available transitions for %s:\n\n", issueKey)
+
+		for _, t := range transitions {
+			if trans, ok := t.(map[string]interface{}); ok {
+				id, _ := trans["id"].(string)
+				name, _ := trans["name"].(string)
+
+				// Get destination status
+				to, _ := trans["to"].(map[string]interface{})
+				toName, _ := to["name"].(string)
+
+				fmt.Printf("  ID: %-4s  → %s", id, name)
+				if toName != "" {
+					fmt.Printf(" (to: %s)", toName)
+				}
+				fmt.Println()
+			}
+		}
+
+		fmt.Printf("\nTo transition: atl jira transition-issue %s <transition-id>\n", issueKey)
+	}
 
 	return nil
 }
@@ -628,8 +683,23 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to transition issue: %w", err)
 	}
 
-	fmt.Printf("✓ Transitioned issue %s\n", issueKey)
-	fmt.Printf("\nView updated issue: atl jira get-issue %s\n", issueKey)
+	if outputJSON {
+		// JSON output - API returns 204 No Content
+		response := map[string]interface{}{
+			"status":  204,
+			"success": true,
+			"message": "Issue transitioned successfully",
+		}
+		output, err := json.MarshalIndent(response, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		fmt.Printf("✓ Transitioned issue %s\n", issueKey)
+		fmt.Printf("\nView updated issue: atl jira get-issue %s\n", issueKey)
+	}
 
 	return nil
 }
