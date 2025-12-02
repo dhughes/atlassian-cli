@@ -250,10 +250,17 @@ func printConfluencePagePretty(page map[string]interface{}, site string) {
 			value, _ := storage["value"].(string)
 			if value != "" {
 				fmt.Printf("\nContent:\n")
-				// Confluence uses HTML storage format, not ADF
-				// For now, just show length
-				fmt.Printf("  (HTML storage format - %d characters)\n", len(value))
-				fmt.Printf("  Use --json to see full content\n")
+				// Convert HTML to readable text
+				contentText := atlassian.HTMLToText(value)
+				if contentText != "" {
+					// Indent content
+					lines := strings.Split(contentText, "\n")
+					for _, line := range lines {
+						fmt.Printf("  %s\n", line)
+					}
+				} else {
+					fmt.Printf("  (empty)\n")
+				}
 			}
 		}
 	}
