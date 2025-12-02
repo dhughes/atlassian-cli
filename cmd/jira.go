@@ -124,6 +124,42 @@ Examples:
 	RunE: runJiraLookupAccountID,
 }
 
+var jiraGetProjectsCmd = &cobra.Command{
+	Use:   "get-projects",
+	Short: "List visible Jira projects",
+	Long: `List Jira projects the user has permission to access.
+
+Examples:
+  atl jira get-projects
+  atl jira get-projects --action create
+  atl jira get-projects --search "Product"`,
+	RunE: runJiraGetProjects,
+}
+
+var jiraGetProjectIssueTypesCmd = &cobra.Command{
+	Use:   "get-project-issue-types <projectKey>",
+	Short: "Get issue types for a project",
+	Long: `Get available issue type metadata for a Jira project.
+
+Examples:
+  atl jira get-project-issue-types FX
+  atl jira get-project-issue-types FX --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraGetProjectIssueTypes,
+}
+
+var jiraGetRemoteLinksCmd = &cobra.Command{
+	Use:   "get-remote-links <issueKey>",
+	Short: "Get remote links for an issue",
+	Long: `Get remote issue links (e.g., Confluence pages) for a Jira issue.
+
+Examples:
+  atl jira get-remote-links FX-123
+  atl jira get-remote-links FX-123 --global-id "appId=456&pageId=123"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraGetRemoteLinks,
+}
+
 var (
 	// Flags for get-issue
 	jiraGetIssueFields         []string
@@ -168,6 +204,20 @@ var (
 	jiraTransitionFields          string
 	jiraTransitionUpdate          string
 	jiraTransitionHistoryMetadata string
+
+	// Flags for get-projects
+	jiraProjectsAction         string
+	jiraProjectsSearch         string
+	jiraProjectsExpandIssueTypes bool
+	jiraProjectsMaxResults     int
+	jiraProjectsStartAt        int
+
+	// Flags for get-project-issue-types
+	jiraIssueTypesMaxResults int
+	jiraIssueTypesStartAt    int
+
+	// Flags for get-remote-links
+	jiraRemoteLinksGlobalID string
 )
 
 func init() {
@@ -180,6 +230,9 @@ func init() {
 	jiraCmd.AddCommand(jiraGetTransitionsCmd)
 	jiraCmd.AddCommand(jiraTransitionIssueCmd)
 	jiraCmd.AddCommand(jiraLookupAccountIDCmd)
+	jiraCmd.AddCommand(jiraGetProjectsCmd)
+	jiraCmd.AddCommand(jiraGetProjectIssueTypesCmd)
+	jiraCmd.AddCommand(jiraGetRemoteLinksCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -236,6 +289,23 @@ func init() {
 
 	// Flags for lookup-account-id
 	jiraLookupAccountIDCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-projects
+	jiraGetProjectsCmd.Flags().StringVar(&jiraProjectsAction, "action", "view", "Filter by permission (view, browse, edit, create)")
+	jiraGetProjectsCmd.Flags().StringVar(&jiraProjectsSearch, "search", "", "Search projects by name or key")
+	jiraGetProjectsCmd.Flags().BoolVar(&jiraProjectsExpandIssueTypes, "expand-issue-types", false, "Include issue types in response")
+	jiraGetProjectsCmd.Flags().IntVar(&jiraProjectsMaxResults, "max-results", 50, "Maximum results to return")
+	jiraGetProjectsCmd.Flags().IntVar(&jiraProjectsStartAt, "start-at", 0, "Starting index for pagination")
+	jiraGetProjectsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-project-issue-types
+	jiraGetProjectIssueTypesCmd.Flags().IntVar(&jiraIssueTypesMaxResults, "max-results", 50, "Maximum results to return")
+	jiraGetProjectIssueTypesCmd.Flags().IntVar(&jiraIssueTypesStartAt, "start-at", 0, "Starting index for pagination")
+	jiraGetProjectIssueTypesCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-remote-links
+	jiraGetRemoteLinksCmd.Flags().StringVar(&jiraRemoteLinksGlobalID, "global-id", "", "Filter by global ID")
+	jiraGetRemoteLinksCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -904,6 +974,200 @@ func runJiraLookupAccountID(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("To assign an issue: atl jira edit-issue <key> --assignee <account-id>\n")
+	}
+
+	return nil
+}
+
+func runJiraGetProjects(cmd *cobra.Command, args []string) error {
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get projects
+	opts := &atlassian.GetVisibleProjectsOptions{
+		Action:           jiraProjectsAction,
+		SearchString:     jiraProjectsSearch,
+		ExpandIssueTypes: jiraProjectsExpandIssueTypes,
+		MaxResults:       jiraProjectsMaxResults,
+		StartAt:          jiraProjectsStartAt,
+	}
+
+	projects, err := client.GetVisibleProjects(opts)
+	if err != nil {
+		return fmt.Errorf("failed to get projects: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(projects, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		if len(projects) == 0 {
+			fmt.Println("No projects found.")
+			return nil
+		}
+
+		fmt.Printf("Found %d project(s):\n\n", len(projects))
+
+		for i, proj := range projects {
+			key, _ := proj["key"].(string)
+			name, _ := proj["name"].(string)
+			projectType, _ := proj["projectTypeKey"].(string)
+
+			fmt.Printf("%d. %s (%s)\n", i+1, name, key)
+			fmt.Printf("   Type: %s\n", projectType)
+
+			// Show issue types if expanded
+			if jiraProjectsExpandIssueTypes {
+				if issueTypes, ok := proj["issueTypes"].([]interface{}); ok && len(issueTypes) > 0 {
+					fmt.Printf("   Issue types: ")
+					types := []string{}
+					for _, it := range issueTypes {
+						if itMap, ok := it.(map[string]interface{}); ok {
+							if name, ok := itMap["name"].(string); ok {
+								types = append(types, name)
+							}
+						}
+					}
+					fmt.Printf("%s\n", strings.Join(types, ", "))
+				}
+			}
+			fmt.Println()
+		}
+	}
+
+	return nil
+}
+
+func runJiraGetProjectIssueTypes(cmd *cobra.Command, args []string) error {
+	projectKey := args[0]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get issue types
+	opts := &atlassian.GetProjectIssueTypesOptions{
+		MaxResults: jiraIssueTypesMaxResults,
+		StartAt:    jiraIssueTypesStartAt,
+	}
+
+	issueTypes, err := client.GetProjectIssueTypes(projectKey, opts)
+	if err != nil {
+		return fmt.Errorf("failed to get issue types: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(issueTypes, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		if len(issueTypes) == 0 {
+			fmt.Printf("No issue types found for project %s\n", projectKey)
+			return nil
+		}
+
+		fmt.Printf("Issue types for project %s:\n\n", projectKey)
+
+		for i, it := range issueTypes {
+			name, _ := it["name"].(string)
+			id, _ := it["id"].(string)
+			description, _ := it["description"].(string)
+			subtask, _ := it["subtask"].(bool)
+
+			typeStr := "Issue"
+			if subtask {
+				typeStr = "Subtask"
+			}
+
+			fmt.Printf("%d. %s (ID: %s) [%s]\n", i+1, name, id, typeStr)
+			if description != "" {
+				fmt.Printf("   %s\n", description)
+			}
+			fmt.Println()
+		}
+	}
+
+	return nil
+}
+
+func runJiraGetRemoteLinks(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get remote links
+	opts := &atlassian.GetRemoteLinksOptions{
+		GlobalID: jiraRemoteLinksGlobalID,
+	}
+
+	links, err := client.GetIssueRemoteLinks(issueKey, opts)
+	if err != nil {
+		return fmt.Errorf("failed to get remote links: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(links, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		if len(links) == 0 {
+			fmt.Printf("No remote links found for %s\n", issueKey)
+			return nil
+		}
+
+		fmt.Printf("Remote links for %s:\n\n", issueKey)
+
+		for i, link := range links {
+			id, _ := link["id"].(string)
+			obj, _ := link["object"].(map[string]interface{})
+			url, _ := obj["url"].(string)
+			title, _ := obj["title"].(string)
+
+			fmt.Printf("%d. %s\n", i+1, title)
+			fmt.Printf("   URL: %s\n", url)
+			fmt.Printf("   ID: %s\n", id)
+			fmt.Println()
+		}
 	}
 
 	return nil

@@ -162,6 +162,20 @@ var (
 	confluenceCommentParentID     string
 	confluenceCommentAttachmentID string
 	confluenceCommentCustomID     string
+
+	// Flags for get-page-descendants
+	confluenceDescendantsDepth int
+	confluenceDescendantsLimit int
+
+	// Flags for get-page-comments
+	confluenceCommentsLimit  int
+	confluenceCommentsStart  int
+	confluenceCommentsStatus string
+
+	// Flags for create-inline-comment
+	confluenceInlineTextSelection      string
+	confluenceInlineMatchIndex         int
+	confluenceInlineMatchCount         int
 )
 
 func init() {
@@ -173,6 +187,10 @@ func init() {
 	confluenceCmd.AddCommand(confluenceCreatePageCmd)
 	confluenceCmd.AddCommand(confluenceUpdatePageCmd)
 	confluenceCmd.AddCommand(confluenceAddCommentCmd)
+	confluenceCmd.AddCommand(confluenceGetPageAncestorsCmd)
+	confluenceCmd.AddCommand(confluenceGetPageDescendantsCmd)
+	confluenceCmd.AddCommand(confluenceGetPageCommentsCmd)
+	confluenceCmd.AddCommand(confluenceCreateInlineCommentCmd)
 
 	// Flags for search-cql
 	confluenceSearchCQLCmd.Flags().IntVar(&confluenceSearchLimit, "limit", 25, "Maximum number of results (max 250)")
@@ -240,6 +258,27 @@ func init() {
 	confluenceAddCommentCmd.Flags().StringVar(&confluenceCommentAttachmentID, "attachment-id", "", "Attachment ID to add to comment")
 	confluenceAddCommentCmd.Flags().StringVar(&confluenceCommentCustomID, "custom-content-id", "", "Custom content ID to add to comment")
 	confluenceAddCommentCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-page-ancestors
+	confluenceGetPageAncestorsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-page-descendants
+	confluenceGetPageDescendantsCmd.Flags().IntVar(&confluenceDescendantsDepth, "depth", 0, "Maximum depth to traverse")
+	confluenceGetPageDescendantsCmd.Flags().IntVar(&confluenceDescendantsLimit, "limit", 25, "Maximum number of descendants")
+	confluenceGetPageDescendantsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-page-comments
+	confluenceGetPageCommentsCmd.Flags().IntVar(&confluenceCommentsLimit, "limit", 25, "Maximum number of comments")
+	confluenceGetPageCommentsCmd.Flags().IntVar(&confluenceCommentsStart, "start", 0, "Starting index for pagination")
+	confluenceGetPageCommentsCmd.Flags().StringVar(&confluenceCommentsStatus, "status", "", "Filter by status")
+	confluenceGetPageCommentsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for create-inline-comment
+	confluenceCreateInlineCommentCmd.Flags().StringVar(&confluenceInlineTextSelection, "text-selection", "", "Text to highlight (required for inline)")
+	confluenceCreateInlineCommentCmd.Flags().IntVar(&confluenceInlineMatchIndex, "match-index", 0, "Match index (0-based)")
+	confluenceCreateInlineCommentCmd.Flags().IntVar(&confluenceInlineMatchCount, "match-count", 1, "Total number of matches")
+	confluenceCreateInlineCommentCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+	confluenceCreateInlineCommentCmd.MarkFlagRequired("text-selection")
 }
 
 func runConfluenceSearchCQL(cmd *cobra.Command, args []string) error {
@@ -778,4 +817,270 @@ func printPagesList(result map[string]interface{}, site string) {
 
 	fmt.Printf("\nTo view a page: atl confluence get-page <page-id>\n")
 	fmt.Printf("For JSON output: atl confluence get-pages-in-space <space> --json\n")
+}
+
+var confluenceGetPageAncestorsCmd = &cobra.Command{
+	Use:   "get-page-ancestors <pageID>",
+	Short: "Get parent pages of a Confluence page",
+	Long: `Retrieve the ancestor (parent) pages of a Confluence page, showing the page hierarchy.
+
+Examples:
+  atl confluence get-page-ancestors 3984293906`,
+	Args: cobra.ExactArgs(1),
+	RunE: runConfluenceGetPageAncestors,
+}
+
+var confluenceGetPageDescendantsCmd = &cobra.Command{
+	Use:   "get-page-descendants <pageID>",
+	Short: "Get child pages of a Confluence page",
+	Long: `Retrieve the descendant (child) pages of a Confluence page.
+
+Examples:
+  atl confluence get-page-descendants 3984293906
+  atl confluence get-page-descendants 3984293906 --depth 2`,
+	Args: cobra.ExactArgs(1),
+	RunE: runConfluenceGetPageDescendants,
+}
+
+var confluenceGetPageCommentsCmd = &cobra.Command{
+	Use:   "get-page-comments <pageID>",
+	Short: "Get comments on a Confluence page",
+	Long: `Retrieve comments on a Confluence page.
+
+Examples:
+  atl confluence get-page-comments 3984293906
+  atl confluence get-page-comments 3984293906 --limit 50`,
+	Args: cobra.ExactArgs(1),
+	RunE: runConfluenceGetPageComments,
+}
+
+var confluenceCreateInlineCommentCmd = &cobra.Command{
+	Use:   "create-inline-comment <pageID> <comment>",
+	Short: "Create an inline comment on a Confluence page",
+	Long: `Create an inline comment attached to specific text on a Confluence page.
+
+Examples:
+  atl confluence create-inline-comment 3984293906 "<p>Great point!</p>" \
+    --text-selection "specific text to highlight" \
+    --match-index 0 \
+    --match-count 1`,
+	Args: cobra.ExactArgs(2),
+	RunE: runConfluenceCreateInlineComment,
+}
+
+func runConfluenceGetPageAncestors(cmd *cobra.Command, args []string) error {
+	pageID := args[0]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	ancestors, err := client.GetPageAncestors(pageID)
+	if err != nil {
+		return fmt.Errorf("failed to get ancestors: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(ancestors, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		if len(ancestors) == 0 {
+			fmt.Println("No ancestors (this is a root page)")
+			return nil
+		}
+
+		fmt.Printf("Page hierarchy for page %s:\n\n", pageID)
+
+		for i, ancestor := range ancestors {
+			title, _ := ancestor["title"].(string)
+			id, _ := ancestor["id"].(string)
+			fmt.Printf("%d. %s (ID: %s)\n", i+1, title, id)
+		}
+	}
+
+	return nil
+}
+
+func runConfluenceGetPageDescendants(cmd *cobra.Command, args []string) error {
+	pageID := args[0]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	opts := &atlassian.GetPageDescendantsOptions{
+		Depth: confluenceDescendantsDepth,
+		Limit: confluenceDescendantsLimit,
+	}
+
+	result, err := client.GetPageDescendants(pageID, opts)
+	if err != nil {
+		return fmt.Errorf("failed to get descendants: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		results, _ := result["results"].([]interface{})
+
+		if len(results) == 0 {
+			fmt.Printf("No child pages found for page %s\n", pageID)
+			return nil
+		}
+
+		fmt.Printf("Child pages of page %s:\n\n", pageID)
+
+		for i, item := range results {
+			if page, ok := item.(map[string]interface{}); ok {
+				title, _ := page["title"].(string)
+				id, _ := page["id"].(string)
+				fmt.Printf("%d. %s (ID: %s)\n", i+1, title, id)
+			}
+		}
+	}
+
+	return nil
+}
+
+func runConfluenceGetPageComments(cmd *cobra.Command, args []string) error {
+	pageID := args[0]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	opts := &atlassian.GetPageCommentsOptions{
+		Limit:  confluenceCommentsLimit,
+		Start:  confluenceCommentsStart,
+		Status: confluenceCommentsStatus,
+	}
+
+	result, err := client.GetPageComments(pageID, opts)
+	if err != nil {
+		return fmt.Errorf("failed to get comments: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		results, _ := result["results"].([]interface{})
+
+		if len(results) == 0 {
+			fmt.Printf("No comments found for page %s\n", pageID)
+			return nil
+		}
+
+		fmt.Printf("Comments on page %s:\n\n", pageID)
+
+		for i, item := range results {
+			if comment, ok := item.(map[string]interface{}); ok {
+				id, _ := comment["id"].(string)
+				title, _ := comment["title"].(string)
+				body, _ := comment["body"].(map[string]interface{})
+
+				fmt.Printf("%d. Comment ID: %s\n", i+1, id)
+				if title != "" {
+					fmt.Printf("   Title: %s\n", title)
+				}
+
+				if body != nil {
+					storage, _ := body["storage"].(map[string]interface{})
+					if storage != nil {
+						value, _ := storage["value"].(string)
+						if value != "" {
+							// Convert HTML to text
+							commentText := atlassian.HTMLToText(value)
+							if len(commentText) > 100 {
+								commentText = commentText[:100] + "..."
+							}
+							fmt.Printf("   %s\n", commentText)
+						}
+					}
+				}
+				fmt.Println()
+			}
+		}
+	}
+
+	return nil
+}
+
+func runConfluenceCreateInlineComment(cmd *cobra.Command, args []string) error {
+	pageID := args[0]
+	comment := args[1]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	opts := &atlassian.CreateInlineCommentOptions{
+		PageID:                  pageID,
+		Comment:                 comment,
+		TextSelection:           confluenceInlineTextSelection,
+		TextSelectionMatchIndex: confluenceInlineMatchIndex,
+		TextSelectionMatchCount: confluenceInlineMatchCount,
+	}
+
+	result, err := client.CreateInlineComment(opts)
+	if err != nil {
+		return fmt.Errorf("failed to create inline comment: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		id, _ := result["id"].(string)
+		fmt.Printf("✓ Created inline comment on page %s\n", pageID)
+		fmt.Printf("  Comment ID: %s\n", id)
+		fmt.Printf("  Highlighted text: %s\n", confluenceInlineTextSelection)
+	}
+
+	return nil
 }

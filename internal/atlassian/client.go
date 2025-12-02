@@ -71,6 +71,7 @@ type AccessibleResource struct {
 }
 
 // GetAccessibleResources fetches the list of accessible Atlassian cloud resources
+// Note: This endpoint requires OAuth and will fail with Basic Auth (API tokens)
 func (c *Client) GetAccessibleResources() ([]AccessibleResource, error) {
 	url := "https://api.atlassian.com/oauth/token/accessible-resources"
 
@@ -91,6 +92,47 @@ func (c *Client) GetAccessibleResources() ([]AccessibleResource, error) {
 	}
 
 	return resources, nil
+}
+
+// RovoSearch performs a unified search across Jira and Confluence
+// Note: This uses Rovo search which may require specific permissions
+func (c *Client) RovoSearch(query string) (map[string]interface{}, error) {
+	// Rovo search endpoint - this may vary based on Atlassian setup
+	baseURL := fmt.Sprintf("%s/gateway/api/rovo/search", c.BaseURL)
+
+	params := url.Values{}
+	params.Add("query", query)
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to search (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// FetchByARI fetches a resource by its ARI (Atlassian Resource Identifier)
+func (c *Client) FetchByARI(ari string) (map[string]interface{}, error) {
+	// Parse ARI to determine type and fetch accordingly
+	// ARI format: ari:cloud:<product>:<cloudId>:<resource-type>/<resource-id>
+	// For now, we'll try a generic approach
+
+	// Note: This is a simplified implementation
+	// The actual fetch logic depends on the ARI structure
+	return nil, fmt.Errorf("fetch by ARI not fully implemented - use product-specific commands instead")
 }
 
 // UserInfo represents the current user's information
@@ -566,6 +608,163 @@ func (c *Client) LookupAccountID(searchString string) ([]map[string]interface{},
 	return users, nil
 }
 
+// GetVisibleProjectsOptions contains parameters for getting visible projects
+type GetVisibleProjectsOptions struct {
+	Action         string // view, browse, edit, create
+	SearchString   string
+	ExpandIssueTypes bool
+	MaxResults     int
+	StartAt        int
+}
+
+// GetVisibleProjects lists projects the user has access to
+func (c *Client) GetVisibleProjects(opts *GetVisibleProjectsOptions) ([]map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/rest/api/3/project/search", c.BaseURL)
+
+	params := url.Values{}
+
+	if opts != nil {
+		if opts.Action != "" {
+			params.Add("action", opts.Action)
+		}
+		if opts.SearchString != "" {
+			params.Add("query", opts.SearchString)
+		}
+		if opts.ExpandIssueTypes {
+			params.Add("expand", "issueTypes")
+		}
+		if opts.MaxResults > 0 {
+			params.Add("maxResults", fmt.Sprintf("%d", opts.MaxResults))
+		}
+		if opts.StartAt > 0 {
+			params.Add("startAt", fmt.Sprintf("%d", opts.StartAt))
+		}
+	}
+
+	fullURL := baseURL
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get projects (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Extract values array
+	values, _ := result["values"].([]interface{})
+	projects := make([]map[string]interface{}, 0, len(values))
+	for _, v := range values {
+		if proj, ok := v.(map[string]interface{}); ok {
+			projects = append(projects, proj)
+		}
+	}
+
+	return projects, nil
+}
+
+// GetProjectIssueTypesOptions contains parameters for getting project issue types
+type GetProjectIssueTypesOptions struct {
+	MaxResults int
+	StartAt    int
+}
+
+// GetProjectIssueTypes gets issue type metadata for a project
+func (c *Client) GetProjectIssueTypes(projectKey string, opts *GetProjectIssueTypesOptions) ([]map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/rest/api/3/issue/createmeta/%s/issuetypes", c.BaseURL, projectKey)
+
+	params := url.Values{}
+	if opts != nil {
+		if opts.MaxResults > 0 {
+			params.Add("maxResults", fmt.Sprintf("%d", opts.MaxResults))
+		}
+		if opts.StartAt > 0 {
+			params.Add("startAt", fmt.Sprintf("%d", opts.StartAt))
+		}
+	}
+
+	fullURL := baseURL
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get issue types (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Extract values array
+	values, _ := result["values"].([]interface{})
+	issueTypes := make([]map[string]interface{}, 0, len(values))
+	for _, v := range values {
+		if it, ok := v.(map[string]interface{}); ok {
+			issueTypes = append(issueTypes, it)
+		}
+	}
+
+	return issueTypes, nil
+}
+
+// GetRemoteLinksOptions contains parameters for getting remote issue links
+type GetRemoteLinksOptions struct {
+	GlobalID string
+}
+
+// GetIssueRemoteLinks gets remote links for a Jira issue
+func (c *Client) GetIssueRemoteLinks(issueKey string, opts *GetRemoteLinksOptions) ([]map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/rest/api/3/issue/%s/remotelink", c.BaseURL, issueKey)
+
+	params := url.Values{}
+	if opts != nil && opts.GlobalID != "" {
+		params.Add("globalId", opts.GlobalID)
+	}
+
+	fullURL := baseURL
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get remote links (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var links []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&links); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return links, nil
+}
+
 // SearchCQLOptions contains optional parameters for CQL search
 type SearchCQLOptions struct {
 	Limit      int
@@ -1012,6 +1211,185 @@ func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[stri
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to add comment (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetPageAncestors gets the parent pages of a Confluence page
+func (c *Client) GetPageAncestors(pageID string) ([]map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s/ancestor", c.BaseURL, pageID)
+
+	resp, err := c.doRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get ancestors (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var ancestors []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&ancestors); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return ancestors, nil
+}
+
+// GetPageDescendantsOptions contains parameters for getting page descendants
+type GetPageDescendantsOptions struct {
+	Depth int
+	Limit int
+}
+
+// GetPageDescendants gets child pages of a Confluence page
+func (c *Client) GetPageDescendants(pageID string, opts *GetPageDescendantsOptions) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s/descendant/page", c.BaseURL, pageID)
+
+	params := url.Values{}
+	if opts != nil {
+		if opts.Depth > 0 {
+			params.Add("depth", fmt.Sprintf("%d", opts.Depth))
+		}
+		if opts.Limit > 0 {
+			params.Add("limit", fmt.Sprintf("%d", opts.Limit))
+		}
+	}
+
+	fullURL := baseURL
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get descendants (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetPageCommentsOptions contains parameters for getting page comments
+type GetPageCommentsOptions struct {
+	Limit  int
+	Start  int
+	Status string
+}
+
+// GetPageComments gets comments for a Confluence page
+func (c *Client) GetPageComments(pageID string, opts *GetPageCommentsOptions) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s/child/comment", c.BaseURL, pageID)
+
+	params := url.Values{}
+	if opts != nil {
+		if opts.Limit > 0 {
+			params.Add("limit", fmt.Sprintf("%d", opts.Limit))
+		}
+		if opts.Start > 0 {
+			params.Add("start", fmt.Sprintf("%d", opts.Start))
+		}
+		if opts.Status != "" {
+			params.Add("status", opts.Status)
+		}
+	}
+
+	fullURL := baseURL
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get comments (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// CreateInlineCommentOptions contains parameters for creating an inline comment
+type CreateInlineCommentOptions struct {
+	PageID                   string
+	Comment                  string
+	TextSelection            string
+	TextSelectionMatchIndex  int
+	TextSelectionMatchCount  int
+}
+
+// CreateInlineComment creates an inline comment on a Confluence page
+func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[string]interface{}, error) {
+	apiURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
+
+	body := map[string]interface{}{
+		"type": "comment",
+		"container": map[string]interface{}{
+			"id":   opts.PageID,
+			"type": "page",
+		},
+		"body": map[string]interface{}{
+			"storage": map[string]interface{}{
+				"value":          opts.Comment,
+				"representation": "storage",
+			},
+		},
+	}
+
+	// Add inline comment properties
+	if opts.TextSelection != "" {
+		body["metadata"] = map[string]interface{}{
+			"properties": map[string]interface{}{
+				"inline-comment-properties": map[string]interface{}{
+					"textSelection":           opts.TextSelection,
+					"textSelectionMatchIndex": opts.TextSelectionMatchIndex,
+					"textSelectionMatchCount": opts.TextSelectionMatchCount,
+				},
+			},
+		}
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", apiURL, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create inline comment (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var result map[string]interface{}
