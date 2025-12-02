@@ -110,6 +110,20 @@ Examples:
 	RunE: runJiraTransitionIssue,
 }
 
+var jiraLookupAccountIDCmd = &cobra.Command{
+	Use:   "lookup-account-id <searchString>",
+	Short: "Find user account ID by name or email",
+	Long: `Search for Jira users by display name or email address to get their account ID.
+
+Account IDs are needed for assigning issues or setting other user fields.
+
+Examples:
+  atl jira lookup-account-id "Doug Hughes"
+  atl jira lookup-account-id "doug@example.com"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraLookupAccountID,
+}
+
 var (
 	// Flags for get-issue
 	jiraGetIssueFields []string
@@ -126,10 +140,22 @@ var (
 	jiraCreateType        string
 	jiraCreateSummary     string
 	jiraCreateDescription string
+	jiraCreateAssignee    string
+	jiraCreateParent      string
+	jiraCreateFields      string
 
 	// Flags for edit-issue
 	jiraEditSummary     string
 	jiraEditDescription string
+	jiraEditAssignee    string
+	jiraEditFields      string
+
+	// Flags for add-comment
+	jiraCommentVisibilityType  string
+	jiraCommentVisibilityValue string
+
+	// Flags for transition-issue
+	jiraTransitionFields string
 )
 
 func init() {
@@ -141,6 +167,7 @@ func init() {
 	jiraCmd.AddCommand(jiraEditIssueCmd)
 	jiraCmd.AddCommand(jiraGetTransitionsCmd)
 	jiraCmd.AddCommand(jiraTransitionIssueCmd)
+	jiraCmd.AddCommand(jiraLookupAccountIDCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -158,24 +185,35 @@ func init() {
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateType, "type", "", "Issue type (required, e.g., Task, Bug, Story)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateSummary, "summary", "", "Issue summary (required)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateDescription, "description", "", "Issue description")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateAssignee, "assignee", "", "Assignee account ID")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateParent, "parent", "", "Parent issue key (for creating subtasks)")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateFields, "fields", "", "Additional fields as JSON object")
 	jiraCreateIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	jiraCreateIssueCmd.MarkFlagRequired("project")
 	jiraCreateIssueCmd.MarkFlagRequired("type")
 	jiraCreateIssueCmd.MarkFlagRequired("summary")
 
 	// Flags for add-comment
+	jiraAddCommentCmd.Flags().StringVar(&jiraCommentVisibilityType, "visibility-type", "", "Restrict visibility (group or role)")
+	jiraAddCommentCmd.Flags().StringVar(&jiraCommentVisibilityValue, "visibility-value", "", "Group or role name for visibility restriction")
 	jiraAddCommentCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for edit-issue
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditSummary, "summary", "", "New summary")
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditDescription, "description", "", "New description")
+	jiraEditIssueCmd.Flags().StringVar(&jiraEditAssignee, "assignee", "", "Assignee account ID")
+	jiraEditIssueCmd.Flags().StringVar(&jiraEditFields, "fields", "", "Additional fields as JSON object")
 	jiraEditIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-transitions
 	jiraGetTransitionsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for transition-issue
+	jiraTransitionIssueCmd.Flags().StringVar(&jiraTransitionFields, "fields", "", "Fields to set during transition as JSON object")
 	jiraTransitionIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for lookup-account-id
+	jiraLookupAccountIDCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -431,12 +469,23 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 	// Create client
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
+	// Parse additional fields if provided
+	var additionalFields map[string]interface{}
+	if jiraCreateFields != "" {
+		if err := json.Unmarshal([]byte(jiraCreateFields), &additionalFields); err != nil {
+			return fmt.Errorf("invalid --fields JSON: %w", err)
+		}
+	}
+
 	// Create issue
 	opts := &atlassian.CreateIssueOptions{
 		ProjectKey:  jiraCreateProject,
 		IssueType:   jiraCreateType,
 		Summary:     jiraCreateSummary,
 		Description: jiraCreateDescription,
+		AssigneeID:  jiraCreateAssignee,
+		ParentKey:   jiraCreateParent,
+		Fields:      additionalFields,
 	}
 
 	result, err := client.CreateJiraIssue(opts)
@@ -475,6 +524,16 @@ func runJiraAddComment(cmd *cobra.Command, args []string) error {
 	issueKey := args[0]
 	comment := args[1]
 
+	// Validate visibility flags
+	if (jiraCommentVisibilityType != "" && jiraCommentVisibilityValue == "") ||
+		(jiraCommentVisibilityType == "" && jiraCommentVisibilityValue != "") {
+		return fmt.Errorf("both --visibility-type and --visibility-value must be provided together")
+	}
+
+	if jiraCommentVisibilityType != "" && jiraCommentVisibilityType != "group" && jiraCommentVisibilityType != "role" {
+		return fmt.Errorf("--visibility-type must be 'group' or 'role'")
+	}
+
 	// Load config and get active account
 	cfg, err := config.Load()
 	if err != nil {
@@ -490,7 +549,13 @@ func runJiraAddComment(cmd *cobra.Command, args []string) error {
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
 	// Add comment
-	result, err := client.AddCommentToIssue(issueKey, comment)
+	opts := &atlassian.AddCommentOptions{
+		Comment:         comment,
+		VisibilityType:  jiraCommentVisibilityType,
+		VisibilityValue: jiraCommentVisibilityValue,
+	}
+
+	result, err := client.AddCommentToIssue(issueKey, opts)
 	if err != nil {
 		return fmt.Errorf("failed to add comment: %w", err)
 	}
@@ -516,8 +581,8 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 	issueKey := args[0]
 
 	// Check if at least one field is provided
-	if jiraEditSummary == "" && jiraEditDescription == "" {
-		return fmt.Errorf("at least one field must be provided (--summary or --description)")
+	if jiraEditSummary == "" && jiraEditDescription == "" && jiraEditAssignee == "" && jiraEditFields == "" {
+		return fmt.Errorf("at least one field must be provided (--summary, --description, --assignee, or --fields)")
 	}
 
 	// Load config and get active account
@@ -537,6 +602,14 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 	// Build fields to update
 	fields := make(map[string]interface{})
 
+	// Parse additional fields first
+	if jiraEditFields != "" {
+		if err := json.Unmarshal([]byte(jiraEditFields), &fields); err != nil {
+			return fmt.Errorf("invalid --fields JSON: %w", err)
+		}
+	}
+
+	// Specific flags override --fields
 	if jiraEditSummary != "" {
 		fields["summary"] = jiraEditSummary
 	}
@@ -557,6 +630,12 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 					},
 				},
 			},
+		}
+	}
+
+	if jiraEditAssignee != "" {
+		fields["assignee"] = map[string]interface{}{
+			"id": jiraEditAssignee,
 		}
 	}
 
@@ -586,6 +665,12 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 		}
 		if jiraEditDescription != "" {
 			fmt.Printf("  Description: updated\n")
+		}
+		if jiraEditAssignee != "" {
+			fmt.Printf("  Assignee: %s\n", jiraEditAssignee)
+		}
+		if jiraEditFields != "" {
+			fmt.Printf("  Additional fields: updated\n")
 		}
 	}
 
@@ -660,6 +745,14 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 	issueKey := args[0]
 	transitionID := args[1]
 
+	// Parse fields if provided
+	var fields map[string]interface{}
+	if jiraTransitionFields != "" {
+		if err := json.Unmarshal([]byte(jiraTransitionFields), &fields); err != nil {
+			return fmt.Errorf("invalid --fields JSON: %w", err)
+		}
+	}
+
 	// Load config and get active account
 	cfg, err := config.Load()
 	if err != nil {
@@ -675,7 +768,7 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
 	// Transition issue
-	err = client.TransitionIssue(issueKey, transitionID, nil)
+	err = client.TransitionIssue(issueKey, transitionID, fields)
 	if err != nil {
 		return fmt.Errorf("failed to transition issue: %w", err)
 	}
@@ -696,6 +789,68 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 		// Pretty output (default)
 		fmt.Printf("✓ Transitioned issue %s\n", issueKey)
 		fmt.Printf("\nView updated issue: atl jira get-issue %s\n", issueKey)
+	}
+
+	return nil
+}
+
+func runJiraLookupAccountID(cmd *cobra.Command, args []string) error {
+	searchString := args[0]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Lookup users
+	users, err := client.LookupAccountID(searchString)
+	if err != nil {
+		return fmt.Errorf("failed to lookup account: %w", err)
+	}
+
+	if outputJSON {
+		// JSON output
+		output, err := json.MarshalIndent(users, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		if len(users) == 0 {
+			fmt.Printf("No users found for '%s'\n", searchString)
+			return nil
+		}
+
+		fmt.Printf("Found %d user(s):\n\n", len(users))
+
+		for i, user := range users {
+			accountID, _ := user["accountId"].(string)
+			displayName, _ := user["displayName"].(string)
+			emailAddress, _ := user["emailAddress"].(string)
+			active, _ := user["active"].(bool)
+
+			statusStr := "active"
+			if !active {
+				statusStr = "inactive"
+			}
+
+			fmt.Printf("%d. %s (%s)\n", i+1, displayName, statusStr)
+			fmt.Printf("   Email: %s\n", emailAddress)
+			fmt.Printf("   Account ID: %s\n", accountID)
+			fmt.Println()
+		}
+
+		fmt.Printf("To assign an issue: atl jira edit-issue <key> --assignee <account-id>\n")
 	}
 
 	return nil

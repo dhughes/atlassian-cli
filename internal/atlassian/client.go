@@ -243,6 +243,7 @@ type CreateIssueOptions struct {
 	Summary     string
 	Description string
 	AssigneeID  string
+	ParentKey   string
 	PriorityID  string
 	Fields      map[string]interface{} // Additional custom fields
 }
@@ -288,6 +289,12 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface
 		}
 	}
 
+	if opts.ParentKey != "" {
+		fields["parent"] = map[string]interface{}{
+			"key": opts.ParentKey,
+		}
+	}
+
 	if opts.PriorityID != "" {
 		fields["priority"] = map[string]interface{}{
 			"id": opts.PriorityID,
@@ -329,8 +336,15 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface
 	return result, nil
 }
 
+// AddCommentOptions contains parameters for adding a comment
+type AddCommentOptions struct {
+	Comment        string
+	VisibilityType string // "group" or "role"
+	VisibilityValue string // Group or role name
+}
+
 // AddCommentToIssue adds a comment to a Jira issue
-func (c *Client) AddCommentToIssue(issueKey, comment string) (map[string]interface{}, error) {
+func (c *Client) AddCommentToIssue(issueKey string, opts *AddCommentOptions) (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/rest/api/3/issue/%s/comment", c.BaseURL, issueKey)
 
 	// Build comment body in ADF format
@@ -344,12 +358,20 @@ func (c *Client) AddCommentToIssue(issueKey, comment string) (map[string]interfa
 					"content": []interface{}{
 						map[string]interface{}{
 							"type": "text",
-							"text": comment,
+							"text": opts.Comment,
 						},
 					},
 				},
 			},
 		},
+	}
+
+	// Add visibility if specified
+	if opts.VisibilityType != "" && opts.VisibilityValue != "" {
+		body["visibility"] = map[string]interface{}{
+			"type":  opts.VisibilityType,
+			"value": opts.VisibilityValue,
+		}
 	}
 
 	bodyJSON, err := json.Marshal(body)
@@ -458,6 +480,34 @@ func (c *Client) TransitionIssue(issueKey, transitionID string, fields map[strin
 	}
 
 	return nil
+}
+
+// LookupAccountID searches for Jira users by display name or email
+func (c *Client) LookupAccountID(searchString string) ([]map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/rest/api/3/user/search", c.BaseURL)
+
+	params := url.Values{}
+	params.Add("query", searchString)
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to lookup account (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var users []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return users, nil
 }
 
 // SearchCQLOptions contains optional parameters for CQL search
