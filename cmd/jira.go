@@ -115,7 +115,6 @@ var (
 	jiraGetIssueFields []string
 	jiraGetIssueExpand []string
 	outputJSON         bool
-	outputPretty       bool
 
 	// Flags for search-jql
 	jiraSearchFields     []string
@@ -147,14 +146,12 @@ func init() {
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueExpand, "expand", []string{}, "Comma-separated list of parameters to expand")
 	jiraGetIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
-	jiraGetIssueCmd.Flags().BoolVar(&outputPretty, "pretty", false, "Human-readable formatted output (default)")
 
 	// Flags for search-jql
 	jiraSearchJQLCmd.Flags().StringSliceVar(&jiraSearchFields, "fields", []string{}, "Comma-separated list of fields to return")
 	jiraSearchJQLCmd.Flags().IntVar(&jiraSearchMaxResults, "max-results", 50, "Maximum number of results to return (max 100)")
 	jiraSearchJQLCmd.Flags().IntVar(&jiraSearchStartAt, "start-at", 0, "Starting index for pagination")
 	jiraSearchJQLCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
-	jiraSearchJQLCmd.Flags().BoolVar(&outputPretty, "pretty", false, "Human-readable formatted output (default)")
 
 	// Flags for create-issue
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateProject, "project", "", "Project key (required)")
