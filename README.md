@@ -43,12 +43,6 @@ The CLI will automatically:
 - Retrieve your display name
 - Save the configuration to `~/.config/atlassian/config.json`
 
-**Note:** Cloud ID is not automatically discovered (it requires OAuth, not Basic Auth). Most commands work without it. If you need to set it manually for specific operations, use:
-
-```bash
-./atl config set cloud-id <your-cloud-id>
-```
-
 ### Check Authentication Status
 
 ```bash
@@ -59,7 +53,6 @@ Shows:
 - Active account name
 - Site URL
 - Email address
-- Cloud ID (if set)
 - Credential validity
 - Your display name
 
@@ -87,29 +80,11 @@ Shows:
 ### Get Specific Configuration Value
 
 ```bash
-./atl config get cloud-id
 ./atl config get active-account
 ./atl config get site
 ./atl config get email
 ```
 
-### Set Configuration Value
-
-```bash
-./atl config set <key> <value>
-```
-
-Useful for setting defaults like:
-```bash
-./atl config set default-project FX
-./atl config set output-format json
-```
-
-### Unset Configuration Value
-
-```bash
-./atl config unset <key>
-```
 
 ## Project Structure
 
@@ -139,15 +114,11 @@ Configuration is stored at `~/.config/atlassian/config.json`:
     "mycompany": {
       "site": "mycompany.atlassian.net",
       "email": "your-email@example.com",
-      "cloud_id": "",
       "token": "your-api-token"
     }
-  },
-  "defaults": {}
+  }
 }
 ```
-
-**Note:** `cloud_id` is optional. Set it manually if needed: `./atl config set cloud-id <value>`
 
 **Security Note**: The config file is created with 0600 permissions (user read/write only).
 

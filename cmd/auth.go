@@ -99,10 +99,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	configAccountName := strings.Split(site, ".")[0]
 
 	cfg.SetAccount(configAccountName, &config.Account{
-		Site:    site,
-		Email:   email,
-		CloudID: "", // Cloud ID will be set manually if needed via config command
-		Token:   token,
+		Site:  site,
+		Email: email,
+		Token: token,
 	})
 	cfg.ActiveAccount = configAccountName
 
@@ -114,8 +113,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Email: %s\n", email)
 	fmt.Printf("✓ Site: %s\n", site)
 	fmt.Printf("\nConfiguration saved. You can now use 'atl' commands.\n")
-	fmt.Printf("\nNote: Cloud ID not set. If needed for specific commands, set it with:\n")
-	fmt.Printf("  atl config set cloud-id <your-cloud-id>\n")
 
 	return nil
 }
@@ -137,9 +134,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Logged in to: %s\n", cfg.ActiveAccount)
-	fmt.Printf("  Site:     %s\n", account.Site)
-	fmt.Printf("  Email:    %s\n", account.Email)
-	fmt.Printf("  Cloud ID: %s\n", account.CloudID)
+	fmt.Printf("  Site:  %s\n", account.Site)
+	fmt.Printf("  Email: %s\n", account.Email)
 
 	// Test if credentials are still valid
 	fmt.Print("  Status:   ")

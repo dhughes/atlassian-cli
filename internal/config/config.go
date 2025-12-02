@@ -11,15 +11,13 @@ import (
 type Config struct {
 	ActiveAccount string              `json:"active_account,omitempty"`
 	Accounts      map[string]*Account `json:"accounts,omitempty"`
-	Defaults      map[string]string   `json:"defaults,omitempty"`
 }
 
 // Account represents an Atlassian account configuration
 type Account struct {
-	Site    string `json:"site"`
-	Email   string `json:"email"`
-	CloudID string `json:"cloud_id,omitempty"`
-	Token   string `json:"token"`
+	Site  string `json:"site"`
+	Email string `json:"email"`
+	Token string `json:"token"`
 }
 
 // ConfigPath returns the path to the config file
@@ -48,7 +46,6 @@ func Load() (*Config, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return &Config{
 			Accounts: make(map[string]*Account),
-			Defaults: make(map[string]string),
 		}, nil
 	}
 
@@ -64,9 +61,6 @@ func Load() (*Config, error) {
 
 	if cfg.Accounts == nil {
 		cfg.Accounts = make(map[string]*Account)
-	}
-	if cfg.Defaults == nil {
-		cfg.Defaults = make(map[string]string)
 	}
 
 	return &cfg, nil
@@ -111,20 +105,4 @@ func (c *Config) SetAccount(name string, account *Account) {
 		c.Accounts = make(map[string]*Account)
 	}
 	c.Accounts[name] = account
-}
-
-// GetDefault returns a default config value
-func (c *Config) GetDefault(key string) string {
-	if c.Defaults == nil {
-		return ""
-	}
-	return c.Defaults[key]
-}
-
-// SetDefault sets a default config value
-func (c *Config) SetDefault(key, value string) {
-	if c.Defaults == nil {
-		c.Defaults = make(map[string]string)
-	}
-	c.Defaults[key] = value
 }
