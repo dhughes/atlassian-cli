@@ -176,3 +176,54 @@ func (c *Client) GetJiraIssue(issueKey string, opts *GetIssueOptions) (map[strin
 
 	return issue, nil
 }
+
+// SearchJQLOptions contains optional parameters for JQL search
+type SearchJQLOptions struct {
+	Fields      []string // List of fields to return
+	MaxResults  int      // Maximum number of results (default 50, max 100)
+	StartAt     int      // Starting index for pagination
+}
+
+// SearchJiraIssuesJQL searches for Jira issues using JQL (Jira Query Language)
+func (c *Client) SearchJiraIssuesJQL(jql string, opts *SearchJQLOptions) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/rest/api/3/search", c.BaseURL)
+
+	// Build query parameters
+	query := "jql=" + jql
+
+	if opts != nil {
+		if len(opts.Fields) > 0 {
+			query += "&fields=" + strings.Join(opts.Fields, ",")
+		}
+		if opts.MaxResults > 0 {
+			query += fmt.Sprintf("&maxResults=%d", opts.MaxResults)
+		} else {
+			query += "&maxResults=50" // Default
+		}
+		if opts.StartAt > 0 {
+			query += fmt.Sprintf("&startAt=%d", opts.StartAt)
+		}
+	} else {
+		query += "&maxResults=50"
+	}
+
+	url += "?" + query
+
+	resp, err := c.doRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to search issues (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
