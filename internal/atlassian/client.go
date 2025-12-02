@@ -134,32 +134,41 @@ func (c *Client) TestAuthentication() error {
 
 // GetIssueOptions contains optional parameters for getting an issue
 type GetIssueOptions struct {
-	Fields []string // List of fields to return
-	Expand []string // List of parameters to expand
+	Fields        []string // List of fields to return
+	Expand        []string // List of parameters to expand
+	Properties    []string // List of properties to return
+	FieldsByKeys  bool     // Return fields by keys instead of IDs
+	UpdateHistory bool     // Include update history
 }
 
 // GetJiraIssue retrieves a Jira issue by its key or ID
 func (c *Client) GetJiraIssue(issueKey string, opts *GetIssueOptions) (map[string]interface{}, error) {
-	url := fmt.Sprintf("%s/rest/api/3/issue/%s", c.BaseURL, issueKey)
+	apiURL := fmt.Sprintf("%s/rest/api/3/issue/%s", c.BaseURL, issueKey)
 
 	// Add query parameters
 	if opts != nil {
-		query := ""
+		params := url.Values{}
 		if len(opts.Fields) > 0 {
-			query += "fields=" + strings.Join(opts.Fields, ",")
+			params.Add("fields", strings.Join(opts.Fields, ","))
 		}
 		if len(opts.Expand) > 0 {
-			if query != "" {
-				query += "&"
-			}
-			query += "expand=" + strings.Join(opts.Expand, ",")
+			params.Add("expand", strings.Join(opts.Expand, ","))
 		}
-		if query != "" {
-			url += "?" + query
+		if len(opts.Properties) > 0 {
+			params.Add("properties", strings.Join(opts.Properties, ","))
+		}
+		if opts.FieldsByKeys {
+			params.Add("fieldsByKeys", "true")
+		}
+		if opts.UpdateHistory {
+			params.Add("updateHistory", "true")
+		}
+		if len(params) > 0 {
+			apiURL += "?" + params.Encode()
 		}
 	}
 
-	resp, err := c.doRequest("GET", url, nil)
+	resp, err := c.doRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -425,11 +434,44 @@ func (c *Client) EditJiraIssue(issueKey string, fields map[string]interface{}) e
 	return nil
 }
 
-// GetIssueTransitions gets available transitions for an issue
-func (c *Client) GetIssueTransitions(issueKey string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
+// GetTransitionsOptions contains optional parameters for getting transitions
+type GetTransitionsOptions struct {
+	Expand                      string
+	TransitionID                string
+	IncludeUnavailableTransitions bool
+	SkipRemoteOnlyCondition     bool
+	SortByOpsBarAndStatus       bool
+}
 
-	resp, err := c.doRequest("GET", url, nil)
+// GetIssueTransitions gets available transitions for an issue
+func (c *Client) GetIssueTransitions(issueKey string, opts *GetTransitionsOptions) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
+
+	params := url.Values{}
+	if opts != nil {
+		if opts.Expand != "" {
+			params.Add("expand", opts.Expand)
+		}
+		if opts.TransitionID != "" {
+			params.Add("transitionId", opts.TransitionID)
+		}
+		if opts.IncludeUnavailableTransitions {
+			params.Add("includeUnavailableTransitions", "true")
+		}
+		if opts.SkipRemoteOnlyCondition {
+			params.Add("skipRemoteOnlyCondition", "true")
+		}
+		if opts.SortByOpsBarAndStatus {
+			params.Add("sortByOpsBarAndStatus", "true")
+		}
+	}
+
+	fullURL := baseURL
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	resp, err := c.doRequest("GET", fullURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -448,19 +490,33 @@ func (c *Client) GetIssueTransitions(issueKey string) (map[string]interface{}, e
 	return result, nil
 }
 
+// TransitionIssueOptions contains parameters for transitioning an issue
+type TransitionIssueOptions struct {
+	TransitionID    string
+	Fields          map[string]interface{}
+	Update          map[string]interface{}
+	HistoryMetadata map[string]interface{}
+}
+
 // TransitionIssue transitions an issue to a new status
-func (c *Client) TransitionIssue(issueKey, transitionID string, fields map[string]interface{}) error {
+func (c *Client) TransitionIssue(issueKey string, opts *TransitionIssueOptions) error {
 	url := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
 
 	body := map[string]interface{}{
 		"transition": map[string]interface{}{
-			"id": transitionID,
+			"id": opts.TransitionID,
 		},
 	}
 
-	// Add any additional fields if provided
-	if fields != nil && len(fields) > 0 {
-		body["fields"] = fields
+	// Add optional parameters
+	if opts.Fields != nil && len(opts.Fields) > 0 {
+		body["fields"] = opts.Fields
+	}
+	if opts.Update != nil && len(opts.Update) > 0 {
+		body["update"] = opts.Update
+	}
+	if opts.HistoryMetadata != nil && len(opts.HistoryMetadata) > 0 {
+		body["historyMetadata"] = opts.HistoryMetadata
 	}
 
 	bodyJSON, err := json.Marshal(body)
@@ -512,8 +568,12 @@ func (c *Client) LookupAccountID(searchString string) ([]map[string]interface{},
 
 // SearchCQLOptions contains optional parameters for CQL search
 type SearchCQLOptions struct {
-	Limit  int    // Maximum number of results (default 25, max 250)
-	Cursor string // Pagination cursor
+	Limit      int
+	Cursor     string
+	CqlContext string
+	Expand     string
+	Next       bool
+	Prev       bool
 }
 
 // SearchConfluenceCQL searches Confluence content using CQL (Confluence Query Language)
@@ -528,10 +588,22 @@ func (c *Client) SearchConfluenceCQL(cql string, opts *SearchCQLOptions) (map[st
 		if opts.Limit > 0 {
 			params.Add("limit", fmt.Sprintf("%d", opts.Limit))
 		} else {
-			params.Add("limit", "25") // Default
+			params.Add("limit", "25")
 		}
 		if opts.Cursor != "" {
 			params.Add("cursor", opts.Cursor)
+		}
+		if opts.CqlContext != "" {
+			params.Add("cqlcontext", opts.CqlContext)
+		}
+		if opts.Expand != "" {
+			params.Add("expand", opts.Expand)
+		}
+		if opts.Next {
+			params.Add("next", "true")
+		}
+		if opts.Prev {
+			params.Add("prev", "true")
 		}
 	} else {
 		params.Add("limit", "25")
@@ -587,18 +659,71 @@ func (c *Client) GetConfluencePage(pageID string) (map[string]interface{}, error
 	return result, nil
 }
 
+// GetSpacesOptions contains parameters for getting spaces
+type GetSpacesOptions struct {
+	Keys              []string
+	IDs               []string
+	Type              string
+	Status            string
+	Labels            []string
+	FavoritedBy       string
+	NotFavoritedBy    string
+	Sort              string
+	DescriptionFormat string
+	IncludeIcon       bool
+	Limit             int
+	Cursor            string
+}
+
 // GetConfluenceSpaces retrieves Confluence spaces
-func (c *Client) GetConfluenceSpaces(spaceKeys []string, limit int) (map[string]interface{}, error) {
+func (c *Client) GetConfluenceSpaces(opts *GetSpacesOptions) (map[string]interface{}, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/space", c.BaseURL)
 
 	params := url.Values{}
-	if len(spaceKeys) > 0 {
-		for _, key := range spaceKeys {
-			params.Add("spaceKey", key)
+
+	if opts != nil {
+		if len(opts.Keys) > 0 {
+			for _, key := range opts.Keys {
+				params.Add("spaceKey", key)
+			}
 		}
-	}
-	if limit > 0 {
-		params.Add("limit", fmt.Sprintf("%d", limit))
+		if len(opts.IDs) > 0 {
+			params.Add("spaceId", strings.Join(opts.IDs, ","))
+		}
+		if opts.Type != "" {
+			params.Add("type", opts.Type)
+		}
+		if opts.Status != "" {
+			params.Add("status", opts.Status)
+		}
+		if len(opts.Labels) > 0 {
+			for _, label := range opts.Labels {
+				params.Add("label", label)
+			}
+		}
+		if opts.FavoritedBy != "" {
+			params.Add("favourite", opts.FavoritedBy)
+		}
+		if opts.NotFavoritedBy != "" {
+			params.Add("favouriteUserKey", opts.NotFavoritedBy)
+		}
+		if opts.Sort != "" {
+			params.Add("sort", opts.Sort)
+		}
+		if opts.DescriptionFormat != "" {
+			params.Add("expand", "description."+opts.DescriptionFormat)
+		}
+		if opts.IncludeIcon {
+			params.Add("expand", "icon")
+		}
+		if opts.Limit > 0 {
+			params.Add("limit", fmt.Sprintf("%d", opts.Limit))
+		} else {
+			params.Add("limit", "25")
+		}
+		if opts.Cursor != "" {
+			params.Add("cursor", opts.Cursor)
+		}
 	} else {
 		params.Add("limit", "25")
 	}
@@ -630,6 +755,10 @@ type GetPagesInSpaceOptions struct {
 	Title    string
 	Status   string
 	Limit    int
+	Cursor   string
+	Depth    string
+	Sort     string
+	Subtype  string
 }
 
 // GetPagesInSpace retrieves pages within a Confluence space
@@ -645,6 +774,19 @@ func (c *Client) GetPagesInSpace(opts *GetPagesInSpaceOptions) (map[string]inter
 	}
 	if opts.Status != "" {
 		params.Add("status", opts.Status)
+	}
+	if opts.Cursor != "" {
+		params.Add("cursor", opts.Cursor)
+	}
+	if opts.Depth != "" {
+		params.Add("depth", opts.Depth)
+	}
+	if opts.Sort != "" {
+		params.Add("orderby", opts.Sort)
+	}
+	if opts.Subtype != "" {
+		params.Add("expand", "metadata.properties.subtype")
+		// Note: Actual subtype filtering may require different approach
 	}
 	if opts.Limit > 0 {
 		params.Add("limit", fmt.Sprintf("%d", opts.Limit))
@@ -675,10 +817,11 @@ func (c *Client) GetPagesInSpace(opts *GetPagesInSpaceOptions) (map[string]inter
 
 // CreatePageOptions contains parameters for creating a page
 type CreatePageOptions struct {
-	SpaceKey string
-	Title    string
-	Body     string
-	ParentID string
+	SpaceKey  string
+	Title     string
+	Body      string
+	ParentID  string
+	IsPrivate bool
 }
 
 // CreateConfluencePage creates a new Confluence page
@@ -707,6 +850,18 @@ func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]inter
 		}
 	}
 
+	if opts.IsPrivate {
+		body["metadata"] = map[string]interface{}{
+			"properties": map[string]interface{}{
+				"editor": map[string]interface{}{
+					"key":   "editor",
+					"value": "v2",
+				},
+			},
+		}
+		// Note: Private pages may require additional permissions setup
+	}
+
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -733,10 +888,14 @@ func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]inter
 
 // UpdatePageOptions contains parameters for updating a page
 type UpdatePageOptions struct {
-	PageID  string
-	Title   string
-	Body    string
-	Version int
+	PageID         string
+	Title          string
+	Body           string
+	Version        int
+	ParentID       string
+	SpaceKey       string
+	Status         string
+	VersionMessage string
 }
 
 // UpdateConfluencePage updates an existing Confluence page
@@ -755,6 +914,28 @@ func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]inter
 				"representation": "storage",
 			},
 		},
+	}
+
+	if opts.VersionMessage != "" {
+		body["version"].(map[string]interface{})["message"] = opts.VersionMessage
+	}
+
+	if opts.ParentID != "" {
+		body["ancestors"] = []interface{}{
+			map[string]interface{}{
+				"id": opts.ParentID,
+			},
+		}
+	}
+
+	if opts.SpaceKey != "" {
+		body["space"] = map[string]interface{}{
+			"key": opts.SpaceKey,
+		}
+	}
+
+	if opts.Status != "" {
+		body["status"] = opts.Status
 	}
 
 	bodyJSON, err := json.Marshal(body)
@@ -783,8 +964,11 @@ func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]inter
 
 // AddPageCommentOptions contains parameters for adding a comment to a page
 type AddPageCommentOptions struct {
-	PageID  string
-	Comment string
+	PageID           string
+	Comment          string
+	ParentCommentID  string
+	AttachmentID     string
+	CustomContentID  string
 }
 
 // AddConfluencePageComment adds a comment to a Confluence page
@@ -804,6 +988,15 @@ func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[stri
 			},
 		},
 	}
+
+	// Add optional parameters
+	if opts.ParentCommentID != "" {
+		body["container"] = map[string]interface{}{
+			"id":   opts.ParentCommentID,
+			"type": "comment",
+		}
+	}
+	// Note: attachmentId and customContentId may require different API structure
 
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {

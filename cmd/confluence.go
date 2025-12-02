@@ -112,28 +112,56 @@ Examples:
 
 var (
 	// Flags for search-cql
-	confluenceSearchLimit  int
-	confluenceSearchCursor string
+	confluenceSearchLimit      int
+	confluenceSearchCursor     string
+	confluenceSearchCqlContext string
+	confluenceSearchExpand     string
+	confluenceSearchNext       bool
+	confluenceSearchPrev       bool
 
 	// Flags for get-spaces
-	confluenceSpaceKeys  []string
-	confluenceSpaceLimit int
+	confluenceSpaceKeys           []string
+	confluenceSpaceIDs            []string
+	confluenceSpaceType           string
+	confluenceSpaceStatus         string
+	confluenceSpaceLabels         []string
+	confluenceSpaceFavoritedBy    string
+	confluenceSpaceNotFavoritedBy string
+	confluenceSpaceSort           string
+	confluenceSpaceDescFormat     string
+	confluenceSpaceIncludeIcon    bool
+	confluenceSpaceLimit          int
+	confluenceSpaceCursor         string
 
 	// Flags for get-pages-in-space
-	confluencePagesTitle  string
-	confluencePagesStatus string
-	confluencePagesLimit  int
+	confluencePagesTitle    string
+	confluencePagesStatus   string
+	confluencePagesLimit    int
+	confluencePagesCursor   string
+	confluencePagesDepth    string
+	confluencePagesSort     string
+	confluencePagesSubtype  string
 
 	// Flags for create-page
-	confluenceCreateSpace  string
-	confluenceCreateTitle  string
-	confluenceCreateBody   string
-	confluenceCreateParent string
+	confluenceCreateSpace   string
+	confluenceCreateTitle   string
+	confluenceCreateBody    string
+	confluenceCreateParent  string
+	confluenceCreatePrivate bool
 
 	// Flags for update-page
-	confluenceUpdateTitle   string
-	confluenceUpdateBody    string
-	confluenceUpdateVersion int
+	confluenceUpdateTitle         string
+	confluenceUpdateBody          string
+	confluenceUpdateVersion       int
+	confluenceUpdateParent        string
+	confluenceUpdateSpace         string
+	confluenceUpdateStatus        string
+	confluenceUpdateVersionMsg    string
+
+	// Flags for add-comment
+	confluenceCommentParentID     string
+	confluenceCommentAttachmentID string
+	confluenceCommentCustomID     string
 )
 
 func init() {
@@ -149,6 +177,10 @@ func init() {
 	// Flags for search-cql
 	confluenceSearchCQLCmd.Flags().IntVar(&confluenceSearchLimit, "limit", 25, "Maximum number of results (max 250)")
 	confluenceSearchCQLCmd.Flags().StringVar(&confluenceSearchCursor, "cursor", "", "Pagination cursor")
+	confluenceSearchCQLCmd.Flags().StringVar(&confluenceSearchCqlContext, "cql-context", "", "CQL context for query execution")
+	confluenceSearchCQLCmd.Flags().StringVar(&confluenceSearchExpand, "expand", "", "Properties to expand")
+	confluenceSearchCQLCmd.Flags().BoolVar(&confluenceSearchNext, "next", false, "Include next page link")
+	confluenceSearchCQLCmd.Flags().BoolVar(&confluenceSearchPrev, "prev", false, "Include previous page link")
 	confluenceSearchCQLCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-page
@@ -156,13 +188,27 @@ func init() {
 
 	// Flags for get-spaces
 	confluenceGetSpacesCmd.Flags().StringSliceVar(&confluenceSpaceKeys, "keys", []string{}, "Filter by space keys")
+	confluenceGetSpacesCmd.Flags().StringSliceVar(&confluenceSpaceIDs, "ids", []string{}, "Filter by space IDs")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceType, "type", "", "Filter by type (global, personal, etc)")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceStatus, "status", "", "Filter by status (current, archived)")
+	confluenceGetSpacesCmd.Flags().StringSliceVar(&confluenceSpaceLabels, "labels", []string{}, "Filter by labels")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceFavoritedBy, "favorited-by", "", "Filter spaces favorited by user account ID")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceNotFavoritedBy, "not-favorited-by", "", "Filter spaces not favorited by user account ID")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceSort, "sort", "", "Sort order (id, -id, key, -key, name, -name)")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceDescFormat, "description-format", "", "Format for space descriptions (plain, view)")
+	confluenceGetSpacesCmd.Flags().BoolVar(&confluenceSpaceIncludeIcon, "include-icon", false, "Include space icon information")
 	confluenceGetSpacesCmd.Flags().IntVar(&confluenceSpaceLimit, "limit", 25, "Maximum number of spaces to return")
+	confluenceGetSpacesCmd.Flags().StringVar(&confluenceSpaceCursor, "cursor", "", "Pagination cursor")
 	confluenceGetSpacesCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-pages-in-space
 	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesTitle, "title", "", "Filter by page title")
-	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesStatus, "status", "", "Filter by status (current, archived, trashed)")
+	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesStatus, "status", "", "Filter by status (current, archived, deleted, trashed)")
 	confluenceGetPagesInSpaceCmd.Flags().IntVar(&confluencePagesLimit, "limit", 25, "Maximum number of pages to return")
+	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesCursor, "cursor", "", "Pagination cursor")
+	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesDepth, "depth", "", "Filter by depth (all, root)")
+	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesSort, "sort", "", "Sort order (id, -id, title, -title, etc)")
+	confluenceGetPagesInSpaceCmd.Flags().StringVar(&confluencePagesSubtype, "subtype", "", "Filter by subtype (live for live docs, page for regular pages)")
 	confluenceGetPagesInSpaceCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for create-page
@@ -170,6 +216,7 @@ func init() {
 	confluenceCreatePageCmd.Flags().StringVar(&confluenceCreateTitle, "title", "", "Page title (required)")
 	confluenceCreatePageCmd.Flags().StringVar(&confluenceCreateBody, "body", "", "Page body in HTML storage format (required)")
 	confluenceCreatePageCmd.Flags().StringVar(&confluenceCreateParent, "parent", "", "Parent page ID")
+	confluenceCreatePageCmd.Flags().BoolVar(&confluenceCreatePrivate, "private", false, "Create as private page")
 	confluenceCreatePageCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	confluenceCreatePageCmd.MarkFlagRequired("space")
 	confluenceCreatePageCmd.MarkFlagRequired("title")
@@ -179,12 +226,19 @@ func init() {
 	confluenceUpdatePageCmd.Flags().StringVar(&confluenceUpdateTitle, "title", "", "New page title (required)")
 	confluenceUpdatePageCmd.Flags().StringVar(&confluenceUpdateBody, "body", "", "New page body in HTML storage format (required)")
 	confluenceUpdatePageCmd.Flags().IntVar(&confluenceUpdateVersion, "version", 0, "New version number (required, must be current version + 1)")
+	confluenceUpdatePageCmd.Flags().StringVar(&confluenceUpdateParent, "parent", "", "New parent page ID")
+	confluenceUpdatePageCmd.Flags().StringVar(&confluenceUpdateSpace, "space", "", "New space key")
+	confluenceUpdatePageCmd.Flags().StringVar(&confluenceUpdateStatus, "status", "", "Page status (current, draft)")
+	confluenceUpdatePageCmd.Flags().StringVar(&confluenceUpdateVersionMsg, "version-message", "", "Version message describing changes")
 	confluenceUpdatePageCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	confluenceUpdatePageCmd.MarkFlagRequired("title")
 	confluenceUpdatePageCmd.MarkFlagRequired("body")
 	confluenceUpdatePageCmd.MarkFlagRequired("version")
 
 	// Flags for add-comment
+	confluenceAddCommentCmd.Flags().StringVar(&confluenceCommentParentID, "parent-comment-id", "", "Parent comment ID for replies")
+	confluenceAddCommentCmd.Flags().StringVar(&confluenceCommentAttachmentID, "attachment-id", "", "Attachment ID to add to comment")
+	confluenceAddCommentCmd.Flags().StringVar(&confluenceCommentCustomID, "custom-content-id", "", "Custom content ID to add to comment")
 	confluenceAddCommentCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
@@ -212,8 +266,12 @@ func runConfluenceSearchCQL(cmd *cobra.Command, args []string) error {
 
 	// Build request options
 	opts := &atlassian.SearchCQLOptions{
-		Limit:  confluenceSearchLimit,
-		Cursor: confluenceSearchCursor,
+		Limit:      confluenceSearchLimit,
+		Cursor:     confluenceSearchCursor,
+		CqlContext: confluenceSearchCqlContext,
+		Expand:     confluenceSearchExpand,
+		Next:       confluenceSearchNext,
+		Prev:       confluenceSearchPrev,
 	}
 
 	// Search content
@@ -403,7 +461,22 @@ func runConfluenceGetSpaces(cmd *cobra.Command, args []string) error {
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
 	// Get spaces
-	result, err := client.GetConfluenceSpaces(confluenceSpaceKeys, confluenceSpaceLimit)
+	opts := &atlassian.GetSpacesOptions{
+		Keys:              confluenceSpaceKeys,
+		IDs:               confluenceSpaceIDs,
+		Type:              confluenceSpaceType,
+		Status:            confluenceSpaceStatus,
+		Labels:            confluenceSpaceLabels,
+		FavoritedBy:       confluenceSpaceFavoritedBy,
+		NotFavoritedBy:    confluenceSpaceNotFavoritedBy,
+		Sort:              confluenceSpaceSort,
+		DescriptionFormat: confluenceSpaceDescFormat,
+		IncludeIcon:       confluenceSpaceIncludeIcon,
+		Limit:             confluenceSpaceLimit,
+		Cursor:            confluenceSpaceCursor,
+	}
+
+	result, err := client.GetConfluenceSpaces(opts)
 	if err != nil {
 		return fmt.Errorf("failed to get spaces: %w", err)
 	}
@@ -444,6 +517,10 @@ func runConfluenceGetPagesInSpace(cmd *cobra.Command, args []string) error {
 		Title:    confluencePagesTitle,
 		Status:   confluencePagesStatus,
 		Limit:    confluencePagesLimit,
+		Cursor:   confluencePagesCursor,
+		Depth:    confluencePagesDepth,
+		Sort:     confluencePagesSort,
+		Subtype:  confluencePagesSubtype,
 	}
 
 	result, err := client.GetPagesInSpace(opts)
@@ -481,10 +558,11 @@ func runConfluenceCreatePage(cmd *cobra.Command, args []string) error {
 
 	// Create page
 	opts := &atlassian.CreatePageOptions{
-		SpaceKey: confluenceCreateSpace,
-		Title:    confluenceCreateTitle,
-		Body:     confluenceCreateBody,
-		ParentID: confluenceCreateParent,
+		SpaceKey:  confluenceCreateSpace,
+		Title:     confluenceCreateTitle,
+		Body:      confluenceCreateBody,
+		ParentID:  confluenceCreateParent,
+		IsPrivate: confluenceCreatePrivate,
 	}
 
 	result, err := client.CreateConfluencePage(opts)
@@ -542,10 +620,14 @@ func runConfluenceUpdatePage(cmd *cobra.Command, args []string) error {
 
 	// Update page
 	opts := &atlassian.UpdatePageOptions{
-		PageID:  pageID,
-		Title:   confluenceUpdateTitle,
-		Body:    confluenceUpdateBody,
-		Version: confluenceUpdateVersion,
+		PageID:         pageID,
+		Title:          confluenceUpdateTitle,
+		Body:           confluenceUpdateBody,
+		Version:        confluenceUpdateVersion,
+		ParentID:       confluenceUpdateParent,
+		SpaceKey:       confluenceUpdateSpace,
+		Status:         confluenceUpdateStatus,
+		VersionMessage: confluenceUpdateVersionMsg,
 	}
 
 	result, err := client.UpdateConfluencePage(opts)
@@ -592,8 +674,11 @@ func runConfluenceAddComment(cmd *cobra.Command, args []string) error {
 
 	// Add comment
 	opts := &atlassian.AddPageCommentOptions{
-		PageID:  pageID,
-		Comment: comment,
+		PageID:          pageID,
+		Comment:         comment,
+		ParentCommentID: confluenceCommentParentID,
+		AttachmentID:    confluenceCommentAttachmentID,
+		CustomContentID: confluenceCommentCustomID,
 	}
 
 	result, err := client.AddConfluencePageComment(opts)

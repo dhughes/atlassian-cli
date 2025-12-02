@@ -126,9 +126,12 @@ Examples:
 
 var (
 	// Flags for get-issue
-	jiraGetIssueFields []string
-	jiraGetIssueExpand []string
-	outputJSON         bool
+	jiraGetIssueFields         []string
+	jiraGetIssueExpand         []string
+	jiraGetIssueProperties     []string
+	jiraGetIssueFieldsByKeys   bool
+	jiraGetIssueUpdateHistory  bool
+	outputJSON                 bool
 
 	// Flags for search-jql
 	jiraSearchFields     []string
@@ -154,8 +157,17 @@ var (
 	jiraCommentVisibilityType  string
 	jiraCommentVisibilityValue string
 
+	// Flags for get-transitions
+	jiraGetTransitionsExpand                      string
+	jiraGetTransitionsTransitionID                string
+	jiraGetTransitionsIncludeUnavailable          bool
+	jiraGetTransitionsSkipRemoteOnly              bool
+	jiraGetTransitionsSortByOpsBarAndStatus       bool
+
 	// Flags for transition-issue
-	jiraTransitionFields string
+	jiraTransitionFields          string
+	jiraTransitionUpdate          string
+	jiraTransitionHistoryMetadata string
 )
 
 func init() {
@@ -172,6 +184,9 @@ func init() {
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueExpand, "expand", []string{}, "Comma-separated list of parameters to expand")
+	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueProperties, "properties", []string{}, "Comma-separated list of properties to return")
+	jiraGetIssueCmd.Flags().BoolVar(&jiraGetIssueFieldsByKeys, "fields-by-keys", false, "Return fields by keys instead of IDs")
+	jiraGetIssueCmd.Flags().BoolVar(&jiraGetIssueUpdateHistory, "update-history", false, "Include update history")
 	jiraGetIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for search-jql
@@ -206,10 +221,17 @@ func init() {
 	jiraEditIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-transitions
+	jiraGetTransitionsCmd.Flags().StringVar(&jiraGetTransitionsExpand, "expand", "", "Expand details for transitions")
+	jiraGetTransitionsCmd.Flags().StringVar(&jiraGetTransitionsTransitionID, "transition-id", "", "Get specific transition by ID")
+	jiraGetTransitionsCmd.Flags().BoolVar(&jiraGetTransitionsIncludeUnavailable, "include-unavailable", false, "Include unavailable transitions")
+	jiraGetTransitionsCmd.Flags().BoolVar(&jiraGetTransitionsSkipRemoteOnly, "skip-remote-only", false, "Skip remote only condition")
+	jiraGetTransitionsCmd.Flags().BoolVar(&jiraGetTransitionsSortByOpsBarAndStatus, "sort-by-ops-bar", false, "Sort by ops bar and status")
 	jiraGetTransitionsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for transition-issue
 	jiraTransitionIssueCmd.Flags().StringVar(&jiraTransitionFields, "fields", "", "Fields to set during transition as JSON object")
+	jiraTransitionIssueCmd.Flags().StringVar(&jiraTransitionUpdate, "update", "", "Update operations as JSON object")
+	jiraTransitionIssueCmd.Flags().StringVar(&jiraTransitionHistoryMetadata, "history-metadata", "", "History metadata as JSON object")
 	jiraTransitionIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for lookup-account-id
@@ -235,8 +257,11 @@ func runJiraGetIssue(cmd *cobra.Command, args []string) error {
 
 	// Build request options
 	opts := &atlassian.GetIssueOptions{
-		Fields: jiraGetIssueFields,
-		Expand: jiraGetIssueExpand,
+		Fields:        jiraGetIssueFields,
+		Expand:        jiraGetIssueExpand,
+		Properties:    jiraGetIssueProperties,
+		FieldsByKeys:  jiraGetIssueFieldsByKeys,
+		UpdateHistory: jiraGetIssueUpdateHistory,
 	}
 
 	// Get issue
@@ -694,8 +719,17 @@ func runJiraGetTransitions(cmd *cobra.Command, args []string) error {
 	// Create client
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
+	// Build options
+	opts := &atlassian.GetTransitionsOptions{
+		Expand:                        jiraGetTransitionsExpand,
+		TransitionID:                  jiraGetTransitionsTransitionID,
+		IncludeUnavailableTransitions: jiraGetTransitionsIncludeUnavailable,
+		SkipRemoteOnlyCondition:       jiraGetTransitionsSkipRemoteOnly,
+		SortByOpsBarAndStatus:         jiraGetTransitionsSortByOpsBarAndStatus,
+	}
+
 	// Get transitions
-	result, err := client.GetIssueTransitions(issueKey)
+	result, err := client.GetIssueTransitions(issueKey, opts)
 	if err != nil {
 		return fmt.Errorf("failed to get transitions: %w", err)
 	}
@@ -745,11 +779,22 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 	issueKey := args[0]
 	transitionID := args[1]
 
-	// Parse fields if provided
-	var fields map[string]interface{}
+	// Parse JSON parameters if provided
+	var fields, update, historyMetadata map[string]interface{}
+
 	if jiraTransitionFields != "" {
 		if err := json.Unmarshal([]byte(jiraTransitionFields), &fields); err != nil {
 			return fmt.Errorf("invalid --fields JSON: %w", err)
+		}
+	}
+	if jiraTransitionUpdate != "" {
+		if err := json.Unmarshal([]byte(jiraTransitionUpdate), &update); err != nil {
+			return fmt.Errorf("invalid --update JSON: %w", err)
+		}
+	}
+	if jiraTransitionHistoryMetadata != "" {
+		if err := json.Unmarshal([]byte(jiraTransitionHistoryMetadata), &historyMetadata); err != nil {
+			return fmt.Errorf("invalid --history-metadata JSON: %w", err)
 		}
 	}
 
@@ -767,8 +812,16 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 	// Create client
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
+	// Build transition options
+	opts := &atlassian.TransitionIssueOptions{
+		TransitionID:    transitionID,
+		Fields:          fields,
+		Update:          update,
+		HistoryMetadata: historyMetadata,
+	}
+
 	// Transition issue
-	err = client.TransitionIssue(issueKey, transitionID, fields)
+	err = client.TransitionIssue(issueKey, opts)
 	if err != nil {
 		return fmt.Errorf("failed to transition issue: %w", err)
 	}
