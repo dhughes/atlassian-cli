@@ -586,3 +586,245 @@ func (c *Client) GetConfluencePage(pageID string) (map[string]interface{}, error
 
 	return result, nil
 }
+
+// GetConfluenceSpaces retrieves Confluence spaces
+func (c *Client) GetConfluenceSpaces(spaceKeys []string, limit int) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/space", c.BaseURL)
+
+	params := url.Values{}
+	if len(spaceKeys) > 0 {
+		for _, key := range spaceKeys {
+			params.Add("spaceKey", key)
+		}
+	}
+	if limit > 0 {
+		params.Add("limit", fmt.Sprintf("%d", limit))
+	} else {
+		params.Add("limit", "25")
+	}
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get spaces (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetPagesInSpaceOptions contains parameters for getting pages in a space
+type GetPagesInSpaceOptions struct {
+	SpaceKey string
+	Title    string
+	Status   string
+	Limit    int
+}
+
+// GetPagesInSpace retrieves pages within a Confluence space
+func (c *Client) GetPagesInSpace(opts *GetPagesInSpaceOptions) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
+
+	params := url.Values{}
+	params.Add("type", "page")
+	params.Add("spaceKey", opts.SpaceKey)
+
+	if opts.Title != "" {
+		params.Add("title", opts.Title)
+	}
+	if opts.Status != "" {
+		params.Add("status", opts.Status)
+	}
+	if opts.Limit > 0 {
+		params.Add("limit", fmt.Sprintf("%d", opts.Limit))
+	} else {
+		params.Add("limit", "25")
+	}
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pages (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// CreatePageOptions contains parameters for creating a page
+type CreatePageOptions struct {
+	SpaceKey string
+	Title    string
+	Body     string
+	ParentID string
+}
+
+// CreateConfluencePage creates a new Confluence page
+func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]interface{}, error) {
+	apiURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
+
+	body := map[string]interface{}{
+		"type":  "page",
+		"title": opts.Title,
+		"space": map[string]interface{}{
+			"key": opts.SpaceKey,
+		},
+		"body": map[string]interface{}{
+			"storage": map[string]interface{}{
+				"value":          opts.Body,
+				"representation": "storage",
+			},
+		},
+	}
+
+	if opts.ParentID != "" {
+		body["ancestors"] = []interface{}{
+			map[string]interface{}{
+				"id": opts.ParentID,
+			},
+		}
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", apiURL, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create page (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// UpdatePageOptions contains parameters for updating a page
+type UpdatePageOptions struct {
+	PageID  string
+	Title   string
+	Body    string
+	Version int
+}
+
+// UpdateConfluencePage updates an existing Confluence page
+func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]interface{}, error) {
+	apiURL := fmt.Sprintf("%s/wiki/rest/api/content/%s", c.BaseURL, opts.PageID)
+
+	body := map[string]interface{}{
+		"type":  "page",
+		"title": opts.Title,
+		"version": map[string]interface{}{
+			"number": opts.Version,
+		},
+		"body": map[string]interface{}{
+			"storage": map[string]interface{}{
+				"value":          opts.Body,
+				"representation": "storage",
+			},
+		},
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("PUT", apiURL, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to update page (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// AddPageCommentOptions contains parameters for adding a comment to a page
+type AddPageCommentOptions struct {
+	PageID  string
+	Comment string
+}
+
+// AddConfluencePageComment adds a comment to a Confluence page
+func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[string]interface{}, error) {
+	apiURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
+
+	body := map[string]interface{}{
+		"type": "comment",
+		"container": map[string]interface{}{
+			"id":   opts.PageID,
+			"type": "page",
+		},
+		"body": map[string]interface{}{
+			"storage": map[string]interface{}{
+				"value":          opts.Comment,
+				"representation": "storage",
+			},
+		},
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", apiURL, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to add comment (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
