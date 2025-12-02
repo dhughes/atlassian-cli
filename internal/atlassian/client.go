@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -186,30 +187,37 @@ type SearchJQLOptions struct {
 
 // SearchJiraIssuesJQL searches for Jira issues using JQL (Jira Query Language)
 func (c *Client) SearchJiraIssuesJQL(jql string, opts *SearchJQLOptions) (map[string]interface{}, error) {
-	url := fmt.Sprintf("%s/rest/api/3/search", c.BaseURL)
+	baseURL := fmt.Sprintf("%s/rest/api/3/search/jql", c.BaseURL)
 
-	// Build query parameters
-	query := "jql=" + jql
+	// Build query parameters using url.Values for proper encoding
+	params := url.Values{}
+	params.Add("jql", jql)
+
+	// Default fields to request if none specified
+	defaultFields := "summary,status,issuetype,assignee,priority,reporter,created,updated"
 
 	if opts != nil {
 		if len(opts.Fields) > 0 {
-			query += "&fields=" + strings.Join(opts.Fields, ",")
+			params.Add("fields", strings.Join(opts.Fields, ","))
+		} else {
+			params.Add("fields", defaultFields)
 		}
 		if opts.MaxResults > 0 {
-			query += fmt.Sprintf("&maxResults=%d", opts.MaxResults)
+			params.Add("maxResults", fmt.Sprintf("%d", opts.MaxResults))
 		} else {
-			query += "&maxResults=50" // Default
+			params.Add("maxResults", "50") // Default
 		}
 		if opts.StartAt > 0 {
-			query += fmt.Sprintf("&startAt=%d", opts.StartAt)
+			params.Add("startAt", fmt.Sprintf("%d", opts.StartAt))
 		}
 	} else {
-		query += "&maxResults=50"
+		params.Add("fields", defaultFields)
+		params.Add("maxResults", "50")
 	}
 
-	url += "?" + query
+	fullURL := baseURL + "?" + params.Encode()
 
-	resp, err := c.doRequest("GET", url, nil)
+	resp, err := c.doRequest("GET", fullURL, nil)
 	if err != nil {
 		return nil, err
 	}

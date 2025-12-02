@@ -251,11 +251,16 @@ func runJiraSearchJQL(cmd *cobra.Command, args []string) error {
 
 func printSearchResults(result map[string]interface{}) {
 	issues, _ := result["issues"].([]interface{})
-	total, _ := result["total"].(float64)
-	startAt, _ := result["startAt"].(float64)
-	maxResults, _ := result["maxResults"].(float64)
+	isLast, _ := result["isLast"].(bool)
+	nextPageToken, _ := result["nextPageToken"].(string)
 
-	fmt.Printf("Found %d issue(s) (showing %d-%d)\n\n", int(total), int(startAt)+1, int(startAt)+len(issues))
+	issueCount := len(issues)
+	if issueCount == 0 {
+		fmt.Println("No issues found.")
+		return
+	}
+
+	fmt.Printf("Showing %d issue(s)\n\n", issueCount)
 
 	for i, issue := range issues {
 		if issueMap, ok := issue.(map[string]interface{}); ok {
@@ -304,14 +309,11 @@ func printSearchResults(result map[string]interface{}) {
 	}
 
 	// Show pagination info
-	if total > maxResults {
-		remaining := int(total) - int(startAt) - len(issues)
-		if remaining > 0 {
-			nextStartAt := int(startAt) + int(maxResults)
-			fmt.Printf("---\n")
-			fmt.Printf("%d more issue(s) available. To see next page:\n", remaining)
-			fmt.Printf("  atl jira search-jql \"<query>\" --start-at %d\n", nextStartAt)
-		}
+	if !isLast && nextPageToken != "" {
+		fmt.Printf("---\n")
+		fmt.Printf("More issues available.\n")
+		fmt.Printf("Note: Pagination with next page tokens is not yet implemented.\n")
+		fmt.Printf("Use --max-results to increase the number of results (max 100).\n")
 	}
 
 	fmt.Printf("\nFor JSON output with all fields: atl jira search-jql \"<query>\" --json\n")
