@@ -439,12 +439,17 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 	// Extract key from response
 	key, _ := result["key"].(string)
 	id, _ := result["id"].(string)
-	self, _ := result["self"].(string)
+
+	// Construct web URL
+	webURL := fmt.Sprintf("%s/browse/%s", account.Site, key)
+	if !strings.HasPrefix(account.Site, "http") {
+		webURL = "https://" + webURL
+	}
 
 	fmt.Printf("✓ Created issue: %s\n", key)
 	fmt.Printf("  ID: %s\n", id)
-	fmt.Printf("  URL: %s\n", self)
-	fmt.Printf("\nView issue: atl jira get-issue %s\n", key)
+	fmt.Printf("  Link: %s\n", webURL)
+	fmt.Printf("\nView details: atl jira get-issue %s\n", key)
 
 	return nil
 }
