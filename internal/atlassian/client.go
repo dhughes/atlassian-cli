@@ -459,3 +459,80 @@ func (c *Client) TransitionIssue(issueKey, transitionID string, fields map[strin
 
 	return nil
 }
+
+// SearchCQLOptions contains optional parameters for CQL search
+type SearchCQLOptions struct {
+	Limit  int    // Maximum number of results (default 25, max 250)
+	Cursor string // Pagination cursor
+}
+
+// SearchConfluenceCQL searches Confluence content using CQL (Confluence Query Language)
+func (c *Client) SearchConfluenceCQL(cql string, opts *SearchCQLOptions) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/search", c.BaseURL)
+
+	// Build query parameters using url.Values for proper encoding
+	params := url.Values{}
+	params.Add("cql", cql)
+
+	if opts != nil {
+		if opts.Limit > 0 {
+			params.Add("limit", fmt.Sprintf("%d", opts.Limit))
+		} else {
+			params.Add("limit", "25") // Default
+		}
+		if opts.Cursor != "" {
+			params.Add("cursor", opts.Cursor)
+		}
+	} else {
+		params.Add("limit", "25")
+	}
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to search content (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetConfluencePage retrieves a Confluence page by ID
+func (c *Client) GetConfluencePage(pageID string) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s", c.BaseURL, pageID)
+
+	// Request body content expanded
+	params := url.Values{}
+	params.Add("expand", "body.storage,version,space,history")
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := c.doRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get page (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
