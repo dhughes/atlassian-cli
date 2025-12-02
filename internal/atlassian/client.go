@@ -235,3 +235,227 @@ func (c *Client) SearchJiraIssuesJQL(jql string, opts *SearchJQLOptions) (map[st
 
 	return result, nil
 }
+
+// CreateIssueOptions contains parameters for creating an issue
+type CreateIssueOptions struct {
+	ProjectKey  string
+	IssueType   string
+	Summary     string
+	Description string
+	AssigneeID  string
+	PriorityID  string
+	Fields      map[string]interface{} // Additional custom fields
+}
+
+// CreateJiraIssue creates a new Jira issue
+func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/rest/api/3/issue", c.BaseURL)
+
+	// Build request body
+	fields := map[string]interface{}{
+		"project": map[string]interface{}{
+			"key": opts.ProjectKey,
+		},
+		"issuetype": map[string]interface{}{
+			"name": opts.IssueType,
+		},
+		"summary": opts.Summary,
+	}
+
+	// Add optional fields
+	if opts.Description != "" {
+		// Convert description to ADF format (simple paragraph)
+		fields["description"] = map[string]interface{}{
+			"type":    "doc",
+			"version": 1,
+			"content": []interface{}{
+				map[string]interface{}{
+					"type": "paragraph",
+					"content": []interface{}{
+						map[string]interface{}{
+							"type": "text",
+							"text": opts.Description,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	if opts.AssigneeID != "" {
+		fields["assignee"] = map[string]interface{}{
+			"id": opts.AssigneeID,
+		}
+	}
+
+	if opts.PriorityID != "" {
+		fields["priority"] = map[string]interface{}{
+			"id": opts.PriorityID,
+		}
+	}
+
+	// Add any additional custom fields
+	if opts.Fields != nil {
+		for k, v := range opts.Fields {
+			fields[k] = v
+		}
+	}
+
+	body := map[string]interface{}{
+		"fields": fields,
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", url, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create issue (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// AddCommentToIssue adds a comment to a Jira issue
+func (c *Client) AddCommentToIssue(issueKey, comment string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s/comment", c.BaseURL, issueKey)
+
+	// Build comment body in ADF format
+	body := map[string]interface{}{
+		"body": map[string]interface{}{
+			"type":    "doc",
+			"version": 1,
+			"content": []interface{}{
+				map[string]interface{}{
+					"type": "paragraph",
+					"content": []interface{}{
+						map[string]interface{}{
+							"type": "text",
+							"text": comment,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", url, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to add comment (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// EditJiraIssue updates fields on a Jira issue
+func (c *Client) EditJiraIssue(issueKey string, fields map[string]interface{}) error {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s", c.BaseURL, issueKey)
+
+	body := map[string]interface{}{
+		"fields": fields,
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("PUT", url, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to edit issue (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// GetIssueTransitions gets available transitions for an issue
+func (c *Client) GetIssueTransitions(issueKey string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
+
+	resp, err := c.doRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get transitions (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// TransitionIssue transitions an issue to a new status
+func (c *Client) TransitionIssue(issueKey, transitionID string, fields map[string]interface{}) error {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
+
+	body := map[string]interface{}{
+		"transition": map[string]interface{}{
+			"id": transitionID,
+		},
+	}
+
+	// Add any additional fields if provided
+	if fields != nil && len(fields) > 0 {
+		body["fields"] = fields
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", url, strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to transition issue (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}

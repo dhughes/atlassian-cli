@@ -49,6 +49,67 @@ Examples:
 	RunE: runJiraSearchJQL,
 }
 
+var jiraCreateIssueCmd = &cobra.Command{
+	Use:   "create-issue",
+	Short: "Create a new Jira issue",
+	Long: `Create a new issue in a Jira project.
+
+Examples:
+  atl jira create-issue --project PROJ --type Task --summary "Do something"
+  atl jira create-issue --project PROJ --type Bug --summary "Fix bug" --description "Bug details here"`,
+	RunE: runJiraCreateIssue,
+}
+
+var jiraAddCommentCmd = &cobra.Command{
+	Use:   "add-comment <issueKey> <comment>",
+	Short: "Add a comment to a Jira issue",
+	Long: `Add a comment to an existing Jira issue.
+
+Examples:
+  atl jira add-comment PROJ-123 "This is a comment"
+  atl jira add-comment PROJ-123 "Multi-line comment works too"`,
+	Args: cobra.ExactArgs(2),
+	RunE: runJiraAddComment,
+}
+
+var jiraEditIssueCmd = &cobra.Command{
+	Use:   "edit-issue <issueKey>",
+	Short: "Edit a Jira issue",
+	Long: `Update fields on an existing Jira issue.
+
+Examples:
+  atl jira edit-issue PROJ-123 --summary "New summary"
+  atl jira edit-issue PROJ-123 --description "New description"
+  atl jira edit-issue PROJ-123 --summary "Update" --description "Details"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraEditIssue,
+}
+
+var jiraGetTransitionsCmd = &cobra.Command{
+	Use:   "get-transitions <issueKey>",
+	Short: "Get available transitions for an issue",
+	Long: `List all available status transitions for a Jira issue.
+
+Examples:
+  atl jira get-transitions PROJ-123`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraGetTransitions,
+}
+
+var jiraTransitionIssueCmd = &cobra.Command{
+	Use:   "transition-issue <issueKey> <transitionID>",
+	Short: "Transition an issue to a new status",
+	Long: `Change the status of a Jira issue using a transition ID.
+
+Use 'get-transitions' to see available transition IDs.
+
+Examples:
+  atl jira transition-issue PROJ-123 21
+  atl jira transition-issue PROJ-123 31`,
+	Args: cobra.ExactArgs(2),
+	RunE: runJiraTransitionIssue,
+}
+
 var (
 	// Flags for get-issue
 	jiraGetIssueFields []string
@@ -60,12 +121,27 @@ var (
 	jiraSearchFields     []string
 	jiraSearchMaxResults int
 	jiraSearchStartAt    int
+
+	// Flags for create-issue
+	jiraCreateProject     string
+	jiraCreateType        string
+	jiraCreateSummary     string
+	jiraCreateDescription string
+
+	// Flags for edit-issue
+	jiraEditSummary     string
+	jiraEditDescription string
 )
 
 func init() {
 	rootCmd.AddCommand(jiraCmd)
 	jiraCmd.AddCommand(jiraGetIssueCmd)
 	jiraCmd.AddCommand(jiraSearchJQLCmd)
+	jiraCmd.AddCommand(jiraCreateIssueCmd)
+	jiraCmd.AddCommand(jiraAddCommentCmd)
+	jiraCmd.AddCommand(jiraEditIssueCmd)
+	jiraCmd.AddCommand(jiraGetTransitionsCmd)
+	jiraCmd.AddCommand(jiraTransitionIssueCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -79,6 +155,19 @@ func init() {
 	jiraSearchJQLCmd.Flags().IntVar(&jiraSearchStartAt, "start-at", 0, "Starting index for pagination")
 	jiraSearchJQLCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	jiraSearchJQLCmd.Flags().BoolVar(&outputPretty, "pretty", false, "Human-readable formatted output (default)")
+
+	// Flags for create-issue
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateProject, "project", "", "Project key (required)")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateType, "type", "", "Issue type (required, e.g., Task, Bug, Story)")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateSummary, "summary", "", "Issue summary (required)")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateDescription, "description", "", "Issue description")
+	jiraCreateIssueCmd.MarkFlagRequired("project")
+	jiraCreateIssueCmd.MarkFlagRequired("type")
+	jiraCreateIssueCmd.MarkFlagRequired("summary")
+
+	// Flags for edit-issue
+	jiraEditIssueCmd.Flags().StringVar(&jiraEditSummary, "summary", "", "New summary")
+	jiraEditIssueCmd.Flags().StringVar(&jiraEditDescription, "description", "", "New description")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -317,4 +406,225 @@ func printSearchResults(result map[string]interface{}) {
 	}
 
 	fmt.Printf("\nFor JSON output with all fields: atl jira search-jql \"<query>\" --json\n")
+}
+
+func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Create issue
+	opts := &atlassian.CreateIssueOptions{
+		ProjectKey:  jiraCreateProject,
+		IssueType:   jiraCreateType,
+		Summary:     jiraCreateSummary,
+		Description: jiraCreateDescription,
+	}
+
+	result, err := client.CreateJiraIssue(opts)
+	if err != nil {
+		return fmt.Errorf("failed to create issue: %w", err)
+	}
+
+	// Extract key from response
+	key, _ := result["key"].(string)
+	id, _ := result["id"].(string)
+	self, _ := result["self"].(string)
+
+	fmt.Printf("✓ Created issue: %s\n", key)
+	fmt.Printf("  ID: %s\n", id)
+	fmt.Printf("  URL: %s\n", self)
+	fmt.Printf("\nView issue: atl jira get-issue %s\n", key)
+
+	return nil
+}
+
+func runJiraAddComment(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+	comment := args[1]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Add comment
+	result, err := client.AddCommentToIssue(issueKey, comment)
+	if err != nil {
+		return fmt.Errorf("failed to add comment: %w", err)
+	}
+
+	id, _ := result["id"].(string)
+	fmt.Printf("✓ Added comment to %s\n", issueKey)
+	fmt.Printf("  Comment ID: %s\n", id)
+
+	return nil
+}
+
+func runJiraEditIssue(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+
+	// Check if at least one field is provided
+	if jiraEditSummary == "" && jiraEditDescription == "" {
+		return fmt.Errorf("at least one field must be provided (--summary or --description)")
+	}
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Build fields to update
+	fields := make(map[string]interface{})
+
+	if jiraEditSummary != "" {
+		fields["summary"] = jiraEditSummary
+	}
+
+	if jiraEditDescription != "" {
+		// Convert description to ADF format
+		fields["description"] = map[string]interface{}{
+			"type":    "doc",
+			"version": 1,
+			"content": []interface{}{
+				map[string]interface{}{
+					"type": "paragraph",
+					"content": []interface{}{
+						map[string]interface{}{
+							"type": "text",
+							"text": jiraEditDescription,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	// Edit issue
+	err = client.EditJiraIssue(issueKey, fields)
+	if err != nil {
+		return fmt.Errorf("failed to edit issue: %w", err)
+	}
+
+	fmt.Printf("✓ Updated issue %s\n", issueKey)
+	if jiraEditSummary != "" {
+		fmt.Printf("  Summary: %s\n", jiraEditSummary)
+	}
+	if jiraEditDescription != "" {
+		fmt.Printf("  Description: updated\n")
+	}
+
+	return nil
+}
+
+func runJiraGetTransitions(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get transitions
+	result, err := client.GetIssueTransitions(issueKey)
+	if err != nil {
+		return fmt.Errorf("failed to get transitions: %w", err)
+	}
+
+	transitions, _ := result["transitions"].([]interface{})
+
+	if len(transitions) == 0 {
+		fmt.Printf("No transitions available for %s\n", issueKey)
+		return nil
+	}
+
+	fmt.Printf("Available transitions for %s:\n\n", issueKey)
+
+	for _, t := range transitions {
+		if trans, ok := t.(map[string]interface{}); ok {
+			id, _ := trans["id"].(string)
+			name, _ := trans["name"].(string)
+
+			// Get destination status
+			to, _ := trans["to"].(map[string]interface{})
+			toName, _ := to["name"].(string)
+
+			fmt.Printf("  ID: %-4s  → %s", id, name)
+			if toName != "" {
+				fmt.Printf(" (to: %s)", toName)
+			}
+			fmt.Println()
+		}
+	}
+
+	fmt.Printf("\nTo transition: atl jira transition-issue %s <transition-id>\n", issueKey)
+
+	return nil
+}
+
+func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+	transitionID := args[1]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Transition issue
+	err = client.TransitionIssue(issueKey, transitionID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to transition issue: %w", err)
+	}
+
+	fmt.Printf("✓ Transitioned issue %s\n", issueKey)
+	fmt.Printf("\nView updated issue: atl jira get-issue %s\n", issueKey)
+
+	return nil
 }
