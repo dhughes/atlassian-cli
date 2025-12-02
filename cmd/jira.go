@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/doughughes/atlassian-cli/internal/atlassian"
 	"github.com/doughughes/atlassian-cli/internal/config"
@@ -21,9 +22,10 @@ var jiraGetIssueCmd = &cobra.Command{
 	Long: `Retrieve detailed information about a Jira issue by its key or ID.
 
 Examples:
-  atl jira get-issue FX-123
+  atl jira get-issue PROJ-123
   atl jira get-issue 10000
-  atl jira get-issue https://ezcater.atlassian.net/browse/FX-123`,
+  atl jira get-issue PROJ-123 --json
+  atl jira get-issue PROJ-123 --fields summary,status,assignee`,
 	Args: cobra.ExactArgs(1),
 	RunE: runJiraGetIssue,
 }
@@ -43,8 +45,8 @@ func init() {
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueExpand, "expand", []string{}, "Comma-separated list of parameters to expand")
-	jiraGetIssueCmd.Flags().BoolVar(&outputJSON, "json", true, "Output as JSON (default)")
-	jiraGetIssueCmd.Flags().BoolVar(&outputPretty, "pretty", false, "Human-readable formatted output")
+	jiraGetIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+	jiraGetIssueCmd.Flags().BoolVar(&outputPretty, "pretty", false, "Human-readable formatted output (default)")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -77,15 +79,16 @@ func runJiraGetIssue(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output
-	if outputPretty {
-		printIssuePretty(issue)
-	} else {
+	if outputJSON {
 		// JSON output
 		output, err := json.MarshalIndent(issue, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to format output: %w", err)
 		}
 		fmt.Println(string(output))
+	} else {
+		// Pretty output (default)
+		printIssuePretty(issue)
 	}
 
 	return nil
@@ -115,6 +118,12 @@ func printIssuePretty(issue map[string]interface{}) {
 			}
 		}
 
+		if priority, ok := fields["priority"].(map[string]interface{}); ok {
+			if name, ok := priority["name"].(string); ok {
+				fmt.Printf("Priority: %s\n", name)
+			}
+		}
+
 		if assignee, ok := fields["assignee"].(map[string]interface{}); ok {
 			if displayName, ok := assignee["displayName"].(string); ok {
 				fmt.Printf("Assignee: %s\n", displayName)
@@ -123,12 +132,36 @@ func printIssuePretty(issue map[string]interface{}) {
 			fmt.Printf("Assignee: Unassigned\n")
 		}
 
+		if reporter, ok := fields["reporter"].(map[string]interface{}); ok {
+			if displayName, ok := reporter["displayName"].(string); ok {
+				fmt.Printf("Reporter: %s\n", displayName)
+			}
+		}
+
+		if created, ok := fields["created"].(string); ok {
+			fmt.Printf("Created: %s\n", created)
+		}
+
+		if updated, ok := fields["updated"].(string); ok {
+			fmt.Printf("Updated: %s\n", updated)
+		}
+
+		// Parse and display description using ADF parser
 		if description, ok := fields["description"]; ok && description != nil {
 			fmt.Printf("\nDescription:\n")
-			// Description is complex (Atlassian Document Format), just show we have it
-			fmt.Printf("  (see JSON output for full description)\n")
+			descText := atlassian.ADFToText(description)
+			if descText != "" {
+				// Indent description text
+				lines := strings.Split(descText, "\n")
+				for _, line := range lines {
+					fmt.Printf("  %s\n", line)
+				}
+			} else {
+				fmt.Printf("  (empty)\n")
+			}
 		}
 	}
 
-	fmt.Printf("\nFor full details, use: atl jira get-issue %s --json\n", key)
+	fmt.Printf("\n---\n")
+	fmt.Printf("For JSON output: atl jira get-issue %s --json\n", key)
 }
