@@ -122,6 +122,22 @@ Configuration is stored at `~/.config/atlassian/config.json`:
 
 **Security Note**: The config file is created with 0600 permissions (user read/write only).
 
+## Searching
+
+This CLI does not support unified Rovo search like the Atlassian MCP server. Rovo requires OAuth 2.1 and has no public REST API.
+
+**To search, use product-specific commands:**
+
+```bash
+# Search Jira issues with JQL
+./atl jira search-jql "project = PROJ AND status = 'In Progress'"
+
+# Search Confluence pages with CQL
+./atl confluence search-cql "title ~ 'Documentation' AND space = TEAM"
+```
+
+See [SEARCH.md](SEARCH.md) for detailed examples and guidance.
+
 ## Future Development
 
 ### Phase 2: Essential Jira Commands (Coming Soon)

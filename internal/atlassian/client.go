@@ -94,45 +94,11 @@ func (c *Client) GetAccessibleResources() ([]AccessibleResource, error) {
 	return resources, nil
 }
 
-// RovoSearch performs a unified search across Jira and Confluence
-// Note: This uses Rovo search which may require specific permissions
-func (c *Client) RovoSearch(query string) (map[string]interface{}, error) {
-	// Rovo search endpoint - this may vary based on Atlassian setup
-	baseURL := fmt.Sprintf("%s/gateway/api/rovo/search", c.BaseURL)
-
-	params := url.Values{}
-	params.Add("query", query)
-
-	fullURL := baseURL + "?" + params.Encode()
-
-	resp, err := c.doRequest("GET", fullURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to search (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return result, nil
-}
-
 // FetchByARI fetches a resource by its ARI (Atlassian Resource Identifier)
+// Note: There is no generic fetch-by-ARI endpoint in the REST API
+// This is a placeholder for MCP parity
 func (c *Client) FetchByARI(ari string) (map[string]interface{}, error) {
-	// Parse ARI to determine type and fetch accordingly
-	// ARI format: ari:cloud:<product>:<cloudId>:<resource-type>/<resource-id>
-	// For now, we'll try a generic approach
-
-	// Note: This is a simplified implementation
-	// The actual fetch logic depends on the ARI structure
-	return nil, fmt.Errorf("fetch by ARI not fully implemented - use product-specific commands instead")
+	return nil, fmt.Errorf("fetch by ARI not implemented - use product-specific commands instead")
 }
 
 // UserInfo represents the current user's information

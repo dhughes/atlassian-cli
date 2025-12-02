@@ -38,23 +38,6 @@ Examples:
 	RunE: runMetaGetResources,
 }
 
-var metaSearchCmd = &cobra.Command{
-	Use:   "search <query>",
-	Short: "Search across Jira and Confluence (Rovo search)",
-	Long: `Perform a unified search across both Jira and Confluence using Rovo search.
-
-NOTE: Rovo search does not have a public REST API. This command is NOT FUNCTIONAL
-with Basic Auth (API tokens). The MCP server uses OAuth or internal endpoints.
-
-For functional search, use:
-  - atl jira search-jql for Jira
-  - atl confluence search-cql for Confluence
-
-This command is included for MCP parity but will not work.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runMetaSearch,
-}
-
 var metaFetchCmd = &cobra.Command{
 	Use:   "fetch <ari>",
 	Short: "Fetch a resource by ARI",
@@ -76,13 +59,11 @@ func init() {
 	rootCmd.AddCommand(metaCmd)
 	metaCmd.AddCommand(metaUserInfoCmd)
 	metaCmd.AddCommand(metaGetResourcesCmd)
-	metaCmd.AddCommand(metaSearchCmd)
 	metaCmd.AddCommand(metaFetchCmd)
 
 	// Flags
 	metaUserInfoCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	metaGetResourcesCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
-	metaSearchCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	metaFetchCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
@@ -169,10 +150,6 @@ func runMetaGetResources(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func runMetaSearch(cmd *cobra.Command, args []string) error {
-	return fmt.Errorf("Rovo search is not available via REST API with Basic Auth.\n\nThe MCP server uses OAuth or internal endpoints not accessible with API tokens.\n\nAlternatives:\n  - Use 'atl jira search-jql' for Jira issues\n  - Use 'atl confluence search-cql' for Confluence pages\n\nSee: https://community.atlassian.com/forums/Rovo-questions/Is-there-API-Rest-access-to-Rovo/qaq-p/3037848")
 }
 
 func runMetaFetch(cmd *cobra.Command, args []string) error {
