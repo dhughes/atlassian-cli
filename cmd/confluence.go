@@ -92,10 +92,13 @@ var confluenceUpdatePageCmd = &cobra.Command{
 	Short: "Update a Confluence page",
 	Long: `Update an existing Confluence page.
 
-Note: You must provide the current version number + 1 for the update to succeed.
+Note: Version number handling differs by status:
+  - Published pages: Use current version + 1
+  - Draft pages: Always use version 1 (drafts don't increment)
 
 Examples:
-  atl confluence update-page 3984293906 --title "Updated Title" --body "<p>New content</p>" --version 16`,
+  atl confluence update-page 3984293906 --title "Updated Title" --body "<p>New content</p>" --version 16
+  atl confluence update-page 123456 --title "Draft" --body "<p>Content</p>" --version 1 --status draft`,
 	Args: cobra.ExactArgs(1),
 	RunE: runConfluenceUpdatePage,
 }
