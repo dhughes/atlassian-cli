@@ -54,9 +54,16 @@ var jiraCreateIssueCmd = &cobra.Command{
 	Short: "Create a new Jira issue",
 	Long: `Create a new issue in a Jira project.
 
+The --description flag supports MARKDOWN formatting including:
+  - Headings (# H1, ## H2, etc.)
+  - Bold (**text**), italic (*text*), code (` + "`code`" + `)
+  - Lists (bullets and numbered)
+  - Code blocks (` + "```language" + `)
+  - Links, blockquotes, and more
+
 Examples:
   atl jira create-issue --project PROJ --type Task --summary "Do something"
-  atl jira create-issue --project PROJ --type Bug --summary "Fix bug" --description "Bug details here"`,
+  atl jira create-issue --project PROJ --type Bug --summary "Fix bug" --description "**Important:** Bug details here"`,
 	RunE: runJiraCreateIssue,
 }
 
@@ -77,10 +84,12 @@ var jiraEditIssueCmd = &cobra.Command{
 	Short: "Edit a Jira issue",
 	Long: `Update fields on an existing Jira issue.
 
+The --description flag supports MARKDOWN formatting (headings, bold, lists, code blocks, etc).
+
 Examples:
   atl jira edit-issue PROJ-123 --summary "New summary"
-  atl jira edit-issue PROJ-123 --description "New description"
-  atl jira edit-issue PROJ-123 --summary "Update" --description "Details"`,
+  atl jira edit-issue PROJ-123 --description "## Updated\n\n- Point 1\n- Point 2"
+  atl jira edit-issue PROJ-123 --summary "Update" --description "Details with **bold**"`,
 	Args: cobra.ExactArgs(1),
 	RunE: runJiraEditIssue,
 }
@@ -252,7 +261,7 @@ func init() {
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateProject, "project", "", "Project key (required)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateType, "type", "", "Issue type (required, e.g., Task, Bug, Story)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateSummary, "summary", "", "Issue summary (required)")
-	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateDescription, "description", "", "Issue description")
+	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateDescription, "description", "", "Issue description (supports markdown formatting)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateAssignee, "assignee", "", "Assignee account ID")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateParent, "parent", "", "Parent issue key (for creating subtasks)")
 	jiraCreateIssueCmd.Flags().StringVar(&jiraCreateFields, "fields", "", "Additional fields as JSON object")
@@ -268,7 +277,7 @@ func init() {
 
 	// Flags for edit-issue
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditSummary, "summary", "", "New summary")
-	jiraEditIssueCmd.Flags().StringVar(&jiraEditDescription, "description", "", "New description")
+	jiraEditIssueCmd.Flags().StringVar(&jiraEditDescription, "description", "", "New description (supports markdown formatting)")
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditAssignee, "assignee", "", "Assignee account ID")
 	jiraEditIssueCmd.Flags().StringVar(&jiraEditFields, "fields", "", "Additional fields as JSON object")
 	jiraEditIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
@@ -710,22 +719,12 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 	}
 
 	if jiraEditDescription != "" {
-		// Convert description to ADF format
-		fields["description"] = map[string]interface{}{
-			"type":    "doc",
-			"version": 1,
-			"content": []interface{}{
-				map[string]interface{}{
-					"type": "paragraph",
-					"content": []interface{}{
-						map[string]interface{}{
-							"type": "text",
-							"text": jiraEditDescription,
-						},
-					},
-				},
-			},
+		// Convert markdown description to ADF format
+		adf, err := atlassian.MarkdownToADF(jiraEditDescription)
+		if err != nil {
+			return fmt.Errorf("failed to convert description to ADF: %w", err)
 		}
+		fields["description"] = adf
 	}
 
 	if jiraEditAssignee != "" {

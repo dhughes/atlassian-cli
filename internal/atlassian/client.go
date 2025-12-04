@@ -282,22 +282,12 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface
 
 	// Add optional fields
 	if opts.Description != "" {
-		// Convert description to ADF format (simple paragraph)
-		fields["description"] = map[string]interface{}{
-			"type":    "doc",
-			"version": 1,
-			"content": []interface{}{
-				map[string]interface{}{
-					"type": "paragraph",
-					"content": []interface{}{
-						map[string]interface{}{
-							"type": "text",
-							"text": opts.Description,
-						},
-					},
-				},
-			},
+		// Convert markdown description to ADF format
+		adf, err := MarkdownToADF(opts.Description)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert description to ADF: %w", err)
 		}
+		fields["description"] = adf
 	}
 
 	if opts.AssigneeID != "" {
