@@ -795,13 +795,23 @@ func (c *Client) SearchConfluenceCQL(cql string, opts *SearchCQLOptions) (map[st
 	return result, nil
 }
 
+// GetPageOptions contains parameters for getting a page
+type GetPageOptions struct {
+	Status string // Page status: current, draft, archived, trashed
+}
+
 // GetConfluencePage retrieves a Confluence page by ID
-func (c *Client) GetConfluencePage(pageID string) (map[string]interface{}, error) {
+func (c *Client) GetConfluencePage(pageID string, opts *GetPageOptions) (map[string]interface{}, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s", c.BaseURL, pageID)
 
 	// Request body content expanded
 	params := url.Values{}
 	params.Add("expand", "body.storage,version,space,history")
+
+	// Add status if specified (defaults to current if not specified)
+	if opts != nil && opts.Status != "" {
+		params.Add("status", opts.Status)
+	}
 
 	fullURL := baseURL + "?" + params.Encode()
 

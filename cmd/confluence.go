@@ -45,6 +45,7 @@ Page ID: 123456789
 
 Examples:
   atl confluence get-page 3984293906
+  atl confluence get-page 3984293906 --status draft
   atl confluence get-page 3984293906 --json`,
 	Args: cobra.ExactArgs(1),
 	RunE: runConfluenceGetPage,
@@ -111,6 +112,9 @@ Examples:
 }
 
 var (
+	// Flags for get-page
+	confluenceGetPageStatus string
+
 	// Flags for search-cql
 	confluenceSearchLimit      int
 	confluenceSearchCursor     string
@@ -202,6 +206,7 @@ func init() {
 	confluenceSearchCQLCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-page
+	confluenceGetPageCmd.Flags().StringVar(&confluenceGetPageStatus, "status", "", "Page status (current, draft, archived, trashed)")
 	confluenceGetPageCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-spaces
@@ -353,7 +358,11 @@ func runConfluenceGetPage(cmd *cobra.Command, args []string) error {
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
 	// Get page
-	page, err := client.GetConfluencePage(pageID)
+	opts := &atlassian.GetPageOptions{
+		Status: confluenceGetPageStatus,
+	}
+
+	page, err := client.GetConfluencePage(pageID, opts)
 	if err != nil {
 		return fmt.Errorf("failed to get page: %w", err)
 	}
