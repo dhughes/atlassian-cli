@@ -22,14 +22,14 @@ var confluenceSearchCQLCmd = &cobra.Command{
 	Long: `Search for Confluence pages using CQL (Confluence Query Language).
 
 CQL is a powerful query language for finding content. Examples:
-  type = page AND space = POL
+  type = page AND space = TEAM
   title ~ "Onboarding" AND type = page
   text ~ "documentation" AND space = ENG
 
 Examples:
-  atl confluence search-cql "space = POL"
-  atl confluence search-cql "title ~ 'FX Onboarding'"
-  atl confluence search-cql "type = page AND space = POL" --limit 10`,
+  atl confluence search-cql "space = TEAM"
+  atl confluence search-cql "title ~ 'Team Onboarding'"
+  atl confluence search-cql "type = page AND space = TEAM" --limit 10`,
 	Args: cobra.ExactArgs(1),
 	RunE: runConfluenceSearchCQL,
 }

@@ -8,7 +8,7 @@ This document provides a complete test workflow for the Jira commands.
 
 ```bash
 ./atl jira create-issue \
-  --project FX \
+  --project ABC \
   --type Task \
   --summary "CLI Test Issue - Delete Me" \
   --description "This is a test issue created by the atlassian CLI. Safe to delete."
@@ -16,21 +16,21 @@ This document provides a complete test workflow for the Jira commands.
 
 **Expected output:**
 ```
-✓ Created issue: FX-XXXX
+✓ Created issue: ABC-123
   ID: 123456
   URL: https://yoursite.atlassian.net/rest/api/3/issue/123456
 
-View issue: atl jira get-issue FX-XXXX
+View issue: atl jira get-issue ABC-123
 ```
 
-**→ Note the issue key (e.g., FX-XXXX) for the next steps!**
+**→ Note the issue key (e.g., ABC-123) for the next steps!**
 
 ---
 
 ### 2. View the Created Issue
 
 ```bash
-./atl jira get-issue FX-XXXX
+./atl jira get-issue ABC-123
 ```
 
 **Expected output:**
@@ -41,18 +41,18 @@ Should show the issue with summary, description, status, etc.
 ### 3. Add a Comment
 
 ```bash
-./atl jira add-comment FX-XXXX "This is a test comment from the CLI"
+./atl jira add-comment ABC-123 "This is a test comment from the CLI"
 ```
 
 **Expected output:**
 ```
-✓ Added comment to FX-XXXX
+✓ Added comment to ABC-123
   Comment ID: 12345
 ```
 
 **Verify:**
 ```bash
-./atl jira get-issue FX-XXXX --json | jq '.fields.comment'
+./atl jira get-issue ABC-123 --json | jq '.fields.comment'
 ```
 
 ---
@@ -61,31 +61,31 @@ Should show the issue with summary, description, status, etc.
 
 Update the summary:
 ```bash
-./atl jira edit-issue FX-XXXX --summary "CLI Test Issue - UPDATED"
+./atl jira edit-issue ABC-123 --summary "CLI Test Issue - UPDATED"
 ```
 
 Update the description:
 ```bash
-./atl jira edit-issue FX-XXXX --description "Updated description from CLI"
+./atl jira edit-issue ABC-123 --description "Updated description from CLI"
 ```
 
 Update both:
 ```bash
-./atl jira edit-issue FX-XXXX \
+./atl jira edit-issue ABC-123 \
   --summary "CLI Test - Final Update" \
   --description "Final test description"
 ```
 
 **Expected output:**
 ```
-✓ Updated issue FX-XXXX
+✓ Updated issue ABC-123
   Summary: CLI Test - Final Update
   Description: updated
 ```
 
 **Verify:**
 ```bash
-./atl jira get-issue FX-XXXX
+./atl jira get-issue ABC-123
 ```
 
 ---
@@ -93,19 +93,19 @@ Update both:
 ### 5. Get Available Transitions
 
 ```bash
-./atl jira get-transitions FX-XXXX
+./atl jira get-transitions ABC-123
 ```
 
 **Expected output:**
 ```
-Available transitions for FX-XXXX:
+Available transitions for ABC-123:
 
   ID: 11    → Start Progress (to: In Progress)
   ID: 21    → Done (to: Done)
   ID: 31    → Won't Do (to: Won't Do)
   ...
 
-To transition: atl jira transition-issue FX-XXXX <transition-id>
+To transition: atl jira transition-issue ABC-123 <transition-id>
 ```
 
 **→ Note the transition ID for "Won't Do" (e.g., 31)**
@@ -115,21 +115,21 @@ To transition: atl jira transition-issue FX-XXXX <transition-id>
 ### 6. Transition to "Won't Do"
 
 ```bash
-./atl jira transition-issue FX-XXXX 31
+./atl jira transition-issue ABC-123 31
 ```
 
 Replace `31` with the actual transition ID from step 5.
 
 **Expected output:**
 ```
-✓ Transitioned issue FX-XXXX
+✓ Transitioned issue ABC-123
 
-View updated issue: atl jira get-issue FX-XXXX
+View updated issue: atl jira get-issue ABC-123
 ```
 
 **Verify:**
 ```bash
-./atl jira get-issue FX-XXXX
+./atl jira get-issue ABC-123
 ```
 
 Should show status as "Won't Do" (or whatever your workflow calls it).
@@ -138,12 +138,12 @@ Should show status as "Won't Do" (or whatever your workflow calls it).
 
 ## Complete Test Script
 
-Here's a complete script you can run (replace FX with your project key):
+Here's a complete script you can run (replace ABC with your project key):
 
 ```bash
 #!/bin/bash
 
-PROJECT="FX"  # Change this to your project key
+PROJECT="ABC"  # Change this to your project key
 
 echo "=== Step 1: Creating test issue ==="
 CREATE_OUTPUT=$(./atl jira create-issue \
@@ -186,19 +186,19 @@ echo "./atl jira transition-issue $ISSUE_KEY <transition-id>"
 ### Search for the test issue
 
 ```bash
-./atl jira search-jql "project = FX AND summary ~ 'CLI Test'"
+./atl jira search-jql "project = ABC AND summary ~ 'CLI Test'"
 ```
 
 ### View issue in JSON format
 
 ```bash
-./atl jira get-issue FX-XXXX --json
+./atl jira get-issue ABC-123 --json
 ```
 
 ### Get specific fields only
 
 ```bash
-./atl jira get-issue FX-XXXX --fields summary,status,assignee
+./atl jira get-issue ABC-123 --fields summary,status,assignee
 ```
 
 ---

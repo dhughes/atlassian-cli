@@ -151,8 +151,8 @@ var jiraGetProjectIssueTypesCmd = &cobra.Command{
 	Long: `Get available issue type metadata for a Jira project.
 
 Examples:
-  atl jira get-project-issue-types FX
-  atl jira get-project-issue-types FX --json`,
+  atl jira get-project-issue-types ABC
+  atl jira get-project-issue-types ABC --json`,
 	Args: cobra.ExactArgs(1),
 	RunE: runJiraGetProjectIssueTypes,
 }
@@ -163,8 +163,8 @@ var jiraGetRemoteLinksCmd = &cobra.Command{
 	Long: `Get remote issue links (e.g., Confluence pages) for a Jira issue.
 
 Examples:
-  atl jira get-remote-links FX-123
-  atl jira get-remote-links FX-123 --global-id "appId=456&pageId=123"`,
+  atl jira get-remote-links ABC-123
+  atl jira get-remote-links ABC-123 --global-id "appId=456&pageId=123"`,
 	Args: cobra.ExactArgs(1),
 	RunE: runJiraGetRemoteLinks,
 }
@@ -178,8 +178,8 @@ This shows all fields (required and optional) and their constraints,
 including allowed values for custom fields like select lists.
 
 Examples:
-  atl jira get-create-meta FX 10001
-  atl jira get-create-meta FX 10001 --json`,
+  atl jira get-create-meta ABC 10001
+  atl jira get-create-meta ABC 10001 --json`,
 	Args: cobra.ExactArgs(2),
 	RunE: runJiraGetCreateMeta,
 }
@@ -193,8 +193,8 @@ Field keys are typically in the format "customfield_XXXXX".
 Requires --project and --issue-type-id flags.
 
 Examples:
-  atl jira get-field-options customfield_10369 --project FX --issue-type-id 10002
-  atl jira get-field-options customfield_10369 --project FX --issue-type-id 10002 --json`,
+  atl jira get-field-options customfield_10369 --project ABC --issue-type-id 10002
+  atl jira get-field-options customfield_10369 --project ABC --issue-type-id 10002 --json`,
 	Args: cobra.ExactArgs(1),
 	RunE: runJiraGetFieldOptions,
 }

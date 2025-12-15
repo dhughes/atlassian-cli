@@ -14,13 +14,13 @@ To search across Jira and Confluence, you need to use **both** search commands s
 
 ```bash
 # Search by project
-./atl jira search-jql "project = FX"
+./atl jira search-jql "project = ABC"
 
 # Search by assignee
 ./atl jira search-jql "assignee = currentUser()"
 
 # Complex queries
-./atl jira search-jql "project = FX AND status = 'In Progress' AND created >= -7d"
+./atl jira search-jql "project = ABC AND status = 'In Progress' AND created >= -7d"
 
 # Combine searches
 ./atl jira search-jql "summary ~ 'authentication' OR description ~ 'authentication'"
@@ -36,13 +36,13 @@ To search across Jira and Confluence, you need to use **both** search commands s
 ./atl confluence search-cql "title ~ 'Onboarding'"
 
 # Search by space
-./atl confluence search-cql "space = POL"
+./atl confluence search-cql "space = TEAM"
 
 # Search by text content
 ./atl confluence search-cql "text ~ 'authentication'"
 
 # Complex queries
-./atl confluence search-cql "title ~ 'FX' AND space = POL AND type = page"
+./atl confluence search-cql "title ~ 'Project' AND space = TEAM AND type = page"
 ```
 
 **CQL (Confluence Query Language) Resources:**
