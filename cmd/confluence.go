@@ -386,8 +386,8 @@ func runConfluenceGetPage(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printConfluenceSearchResults(result map[string]interface{}, site string) {
-	results, _ := result["results"].([]interface{})
+func printConfluenceSearchResults(result map[string]any, site string) {
+	results, _ := result["results"].([]any)
 	size, _ := result["size"].(float64)
 
 	if len(results) == 0 {
@@ -398,18 +398,18 @@ func printConfluenceSearchResults(result map[string]interface{}, site string) {
 	fmt.Printf("Found %d result(s)\n\n", int(size))
 
 	for i, item := range results {
-		if content, ok := item.(map[string]interface{}); ok {
+		if content, ok := item.(map[string]any); ok {
 			id, _ := content["id"].(string)
 			title, _ := content["title"].(string)
 			contentType, _ := content["type"].(string)
 
-			space, _ := content["space"].(map[string]interface{})
+			space, _ := content["space"].(map[string]any)
 			spaceName, _ := space["name"].(string)
 			spaceKey, _ := space["key"].(string)
 
 			// Construct web URL
 			webURL := ""
-			if links, ok := content["_links"].(map[string]interface{}); ok {
+			if links, ok := content["_links"].(map[string]any); ok {
 				if webui, ok := links["webui"].(string); ok {
 					webURL = fmt.Sprintf("%s/wiki%s", site, webui)
 					if !strings.HasPrefix(site, "http") {
@@ -431,25 +431,25 @@ func printConfluenceSearchResults(result map[string]interface{}, site string) {
 	fmt.Printf("For JSON output: atl confluence search-cql \"<query>\" --json\n")
 }
 
-func printConfluencePagePretty(page map[string]interface{}, site string) {
+func printConfluencePagePretty(page map[string]any, site string) {
 	id, _ := page["id"].(string)
 	title, _ := page["title"].(string)
 	pageType, _ := page["type"].(string)
 
-	space, _ := page["space"].(map[string]interface{})
+	space, _ := page["space"].(map[string]any)
 	spaceName, _ := space["name"].(string)
 	spaceKey, _ := space["key"].(string)
 
-	version, _ := page["version"].(map[string]interface{})
+	version, _ := page["version"].(map[string]any)
 	versionNum, _ := version["number"].(float64)
 
-	history, _ := page["history"].(map[string]interface{})
-	createdBy, _ := history["createdBy"].(map[string]interface{})
+	history, _ := page["history"].(map[string]any)
+	createdBy, _ := history["createdBy"].(map[string]any)
 	createdByName, _ := createdBy["displayName"].(string)
 
 	// Construct web URL
 	webURL := ""
-	if links, ok := page["_links"].(map[string]interface{}); ok {
+	if links, ok := page["_links"].(map[string]any); ok {
 		if webui, ok := links["webui"].(string); ok {
 			webURL = fmt.Sprintf("%s/wiki%s", site, webui)
 			if !strings.HasPrefix(site, "http") {
@@ -470,9 +470,9 @@ func printConfluencePagePretty(page map[string]interface{}, site string) {
 	}
 
 	// Get page body content
-	body, _ := page["body"].(map[string]interface{})
+	body, _ := page["body"].(map[string]any)
 	if body != nil {
-		storage, _ := body["storage"].(map[string]interface{})
+		storage, _ := body["storage"].(map[string]any)
 		if storage != nil {
 			value, _ := storage["value"].(string)
 			if value != "" {
@@ -633,7 +633,7 @@ func runConfluenceCreatePage(cmd *cobra.Command, args []string) error {
 
 		// Construct web URL
 		webURL := ""
-		if links, ok := result["_links"].(map[string]interface{}); ok {
+		if links, ok := result["_links"].(map[string]any); ok {
 			if webui, ok := links["webui"].(string); ok {
 				webURL = fmt.Sprintf("%s/wiki%s", account.Site, webui)
 				if !strings.HasPrefix(account.Site, "http") {
@@ -694,7 +694,7 @@ func runConfluenceUpdatePage(cmd *cobra.Command, args []string) error {
 		fmt.Println(string(output))
 	} else {
 		title, _ := result["title"].(string)
-		version, _ := result["version"].(map[string]interface{})
+		version, _ := result["version"].(map[string]any)
 		versionNum, _ := version["number"].(float64)
 
 		fmt.Printf("✓ Updated page: %s\n", title)
@@ -752,8 +752,8 @@ func runConfluenceAddComment(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printSpacesList(result map[string]interface{}, site string) {
-	results, _ := result["results"].([]interface{})
+func printSpacesList(result map[string]any, site string) {
+	results, _ := result["results"].([]any)
 	size, _ := result["size"].(float64)
 
 	if len(results) == 0 {
@@ -764,14 +764,14 @@ func printSpacesList(result map[string]interface{}, site string) {
 	fmt.Printf("Found %d space(s)\n\n", int(size))
 
 	for i, item := range results {
-		if space, ok := item.(map[string]interface{}); ok {
+		if space, ok := item.(map[string]any); ok {
 			key, _ := space["key"].(string)
 			name, _ := space["name"].(string)
 			spaceType, _ := space["type"].(string)
 
 			// Construct web URL
 			webURL := ""
-			if links, ok := space["_links"].(map[string]interface{}); ok {
+			if links, ok := space["_links"].(map[string]any); ok {
 				if webui, ok := links["webui"].(string); ok {
 					webURL = fmt.Sprintf("%s/wiki%s", site, webui)
 					if !strings.HasPrefix(site, "http") {
@@ -792,8 +792,8 @@ func printSpacesList(result map[string]interface{}, site string) {
 	fmt.Printf("\nFor JSON output: atl confluence get-spaces --json\n")
 }
 
-func printPagesList(result map[string]interface{}, site string) {
-	results, _ := result["results"].([]interface{})
+func printPagesList(result map[string]any, site string) {
+	results, _ := result["results"].([]any)
 	size, _ := result["size"].(float64)
 
 	if len(results) == 0 {
@@ -804,13 +804,13 @@ func printPagesList(result map[string]interface{}, site string) {
 	fmt.Printf("Found %d page(s)\n\n", int(size))
 
 	for i, item := range results {
-		if page, ok := item.(map[string]interface{}); ok {
+		if page, ok := item.(map[string]any); ok {
 			id, _ := page["id"].(string)
 			title, _ := page["title"].(string)
 
 			// Construct web URL
 			webURL := ""
-			if links, ok := page["_links"].(map[string]interface{}); ok {
+			if links, ok := page["_links"].(map[string]any); ok {
 				if webui, ok := links["webui"].(string); ok {
 					webURL = fmt.Sprintf("%s/wiki%s", site, webui)
 					if !strings.HasPrefix(site, "http") {
@@ -956,7 +956,7 @@ func runConfluenceGetPageDescendants(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println(string(output))
 	} else {
-		results, _ := result["results"].([]interface{})
+		results, _ := result["results"].([]any)
 
 		if len(results) == 0 {
 			fmt.Printf("No child pages found for page %s\n", pageID)
@@ -966,7 +966,7 @@ func runConfluenceGetPageDescendants(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Child pages of page %s:\n\n", pageID)
 
 		for i, item := range results {
-			if page, ok := item.(map[string]interface{}); ok {
+			if page, ok := item.(map[string]any); ok {
 				title, _ := page["title"].(string)
 				id, _ := page["id"].(string)
 				fmt.Printf("%d. %s (ID: %s)\n", i+1, title, id)
@@ -1010,7 +1010,7 @@ func runConfluenceGetPageComments(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println(string(output))
 	} else {
-		results, _ := result["results"].([]interface{})
+		results, _ := result["results"].([]any)
 
 		if len(results) == 0 {
 			fmt.Printf("No comments found for page %s\n", pageID)
@@ -1020,10 +1020,10 @@ func runConfluenceGetPageComments(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Comments on page %s:\n\n", pageID)
 
 		for i, item := range results {
-			if comment, ok := item.(map[string]interface{}); ok {
+			if comment, ok := item.(map[string]any); ok {
 				id, _ := comment["id"].(string)
 				title, _ := comment["title"].(string)
-				body, _ := comment["body"].(map[string]interface{})
+				body, _ := comment["body"].(map[string]any)
 
 				fmt.Printf("%d. Comment ID: %s\n", i+1, id)
 				if title != "" {
@@ -1031,7 +1031,7 @@ func runConfluenceGetPageComments(cmd *cobra.Command, args []string) error {
 				}
 
 				if body != nil {
-					storage, _ := body["storage"].(map[string]interface{})
+					storage, _ := body["storage"].(map[string]any)
 					if storage != nil {
 						value, _ := storage["value"].(string)
 						if value != "" {

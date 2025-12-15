@@ -195,7 +195,7 @@ func TestMarkdownToADF_ComplexDocument(t *testing.T) {
 	}
 
 	// Verify it has content
-	content, hasContent := adf["content"].([]interface{})
+	content, hasContent := adf["content"].([]any)
 	if !hasContent {
 		t.Fatal("Expected document to have content")
 	}

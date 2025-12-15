@@ -8,7 +8,7 @@ import (
 )
 
 // MarkdownToADF converts markdown text to Atlassian Document Format (ADF)
-func MarkdownToADF(markdown string) (map[string]interface{}, error) {
+func MarkdownToADF(markdown string) (map[string]any, error) {
 	var buf bytes.Buffer
 
 	// Convert markdown to ADF using the renderer
@@ -17,7 +17,7 @@ func MarkdownToADF(markdown string) (map[string]interface{}, error) {
 	}
 
 	// Parse the ADF JSON
-	var adf map[string]interface{}
+	var adf map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &adf); err != nil {
 		return nil, err
 	}

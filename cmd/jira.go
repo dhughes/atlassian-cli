@@ -409,10 +409,10 @@ func runJiraGetIssue(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printIssuePretty(issue map[string]interface{}) {
+func printIssuePretty(issue map[string]any) {
 	// Extract common fields
 	key, _ := issue["key"].(string)
-	fields, _ := issue["fields"].(map[string]interface{})
+	fields, _ := issue["fields"].(map[string]any)
 
 	fmt.Printf("Issue: %s\n", key)
 
@@ -421,25 +421,25 @@ func printIssuePretty(issue map[string]interface{}) {
 			fmt.Printf("Summary: %s\n", summary)
 		}
 
-		if issueType, ok := fields["issuetype"].(map[string]interface{}); ok {
+		if issueType, ok := fields["issuetype"].(map[string]any); ok {
 			if name, ok := issueType["name"].(string); ok {
 				fmt.Printf("Type: %s\n", name)
 			}
 		}
 
-		if status, ok := fields["status"].(map[string]interface{}); ok {
+		if status, ok := fields["status"].(map[string]any); ok {
 			if name, ok := status["name"].(string); ok {
 				fmt.Printf("Status: %s\n", name)
 			}
 		}
 
-		if priority, ok := fields["priority"].(map[string]interface{}); ok {
+		if priority, ok := fields["priority"].(map[string]any); ok {
 			if name, ok := priority["name"].(string); ok {
 				fmt.Printf("Priority: %s\n", name)
 			}
 		}
 
-		if assignee, ok := fields["assignee"].(map[string]interface{}); ok {
+		if assignee, ok := fields["assignee"].(map[string]any); ok {
 			if displayName, ok := assignee["displayName"].(string); ok {
 				fmt.Printf("Assignee: %s\n", displayName)
 			}
@@ -447,7 +447,7 @@ func printIssuePretty(issue map[string]interface{}) {
 			fmt.Printf("Assignee: Unassigned\n")
 		}
 
-		if reporter, ok := fields["reporter"].(map[string]interface{}); ok {
+		if reporter, ok := fields["reporter"].(map[string]any); ok {
 			if displayName, ok := reporter["displayName"].(string); ok {
 				fmt.Printf("Reporter: %s\n", displayName)
 			}
@@ -532,8 +532,8 @@ func runJiraSearchJQL(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printSearchResults(result map[string]interface{}) {
-	issues, _ := result["issues"].([]interface{})
+func printSearchResults(result map[string]any) {
+	issues, _ := result["issues"].([]any)
 	isLast, _ := result["isLast"].(bool)
 	nextPageToken, _ := result["nextPageToken"].(string)
 
@@ -546,9 +546,9 @@ func printSearchResults(result map[string]interface{}) {
 	fmt.Printf("Showing %d issue(s)\n\n", issueCount)
 
 	for i, issue := range issues {
-		if issueMap, ok := issue.(map[string]interface{}); ok {
+		if issueMap, ok := issue.(map[string]any); ok {
 			key, _ := issueMap["key"].(string)
-			fields, _ := issueMap["fields"].(map[string]interface{})
+			fields, _ := issueMap["fields"].(map[string]any)
 
 			fmt.Printf("%d. %s", i+1, key)
 
@@ -563,19 +563,19 @@ func printSearchResults(result map[string]interface{}) {
 				// Show type, status, assignee on same line
 				parts := []string{}
 
-				if issueType, ok := fields["issuetype"].(map[string]interface{}); ok {
+				if issueType, ok := fields["issuetype"].(map[string]any); ok {
 					if name, ok := issueType["name"].(string); ok {
 						parts = append(parts, fmt.Sprintf("Type: %s", name))
 					}
 				}
 
-				if status, ok := fields["status"].(map[string]interface{}); ok {
+				if status, ok := fields["status"].(map[string]any); ok {
 					if name, ok := status["name"].(string); ok {
 						parts = append(parts, fmt.Sprintf("Status: %s", name))
 					}
 				}
 
-				if assignee, ok := fields["assignee"].(map[string]interface{}); ok {
+				if assignee, ok := fields["assignee"].(map[string]any); ok {
 					if displayName, ok := assignee["displayName"].(string); ok {
 						parts = append(parts, fmt.Sprintf("Assignee: %s", displayName))
 					}
@@ -618,7 +618,7 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
 	// Parse additional fields if provided
-	var additionalFields map[string]interface{}
+	var additionalFields map[string]any
 	if jiraCreateFields != "" {
 		if err := json.Unmarshal([]byte(jiraCreateFields), &additionalFields); err != nil {
 			return fmt.Errorf("invalid --fields JSON: %w", err)
@@ -748,7 +748,7 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 	client := atlassian.NewClient(account.Email, account.Token, account.Site)
 
 	// Build fields to update
-	fields := make(map[string]interface{})
+	fields := make(map[string]any)
 
 	// Parse additional fields first
 	if jiraEditFields != "" {
@@ -772,7 +772,7 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 	}
 
 	if jiraEditAssignee != "" {
-		fields["assignee"] = map[string]interface{}{
+		fields["assignee"] = map[string]any{
 			"id": jiraEditAssignee,
 		}
 	}
@@ -785,7 +785,7 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 
 	if outputJSON {
 		// JSON output - API returns 204 No Content
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  204,
 			"success": true,
 			"message": "Issue updated successfully",
@@ -856,7 +856,7 @@ func runJiraGetTransitions(cmd *cobra.Command, args []string) error {
 		fmt.Println(string(output))
 	} else {
 		// Pretty output (default)
-		transitions, _ := result["transitions"].([]interface{})
+		transitions, _ := result["transitions"].([]any)
 
 		if len(transitions) == 0 {
 			fmt.Printf("No transitions available for %s\n", issueKey)
@@ -866,12 +866,12 @@ func runJiraGetTransitions(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Available transitions for %s:\n\n", issueKey)
 
 		for _, t := range transitions {
-			if trans, ok := t.(map[string]interface{}); ok {
+			if trans, ok := t.(map[string]any); ok {
 				id, _ := trans["id"].(string)
 				name, _ := trans["name"].(string)
 
 				// Get destination status
-				to, _ := trans["to"].(map[string]interface{})
+				to, _ := trans["to"].(map[string]any)
 				toName, _ := to["name"].(string)
 
 				fmt.Printf("  ID: %-4s  → %s", id, name)
@@ -893,7 +893,7 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 	transitionID := args[1]
 
 	// Parse JSON parameters if provided
-	var fields, update, historyMetadata map[string]interface{}
+	var fields, update, historyMetadata map[string]any
 
 	if jiraTransitionFields != "" {
 		if err := json.Unmarshal([]byte(jiraTransitionFields), &fields); err != nil {
@@ -941,7 +941,7 @@ func runJiraTransitionIssue(cmd *cobra.Command, args []string) error {
 
 	if outputJSON {
 		// JSON output - API returns 204 No Content
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  204,
 			"success": true,
 			"message": "Issue transitioned successfully",
@@ -1075,11 +1075,11 @@ func runJiraGetProjects(cmd *cobra.Command, args []string) error {
 
 			// Show issue types if expanded
 			if jiraProjectsExpandIssueTypes {
-				if issueTypes, ok := proj["issueTypes"].([]interface{}); ok && len(issueTypes) > 0 {
+				if issueTypes, ok := proj["issueTypes"].([]any); ok && len(issueTypes) > 0 {
 					fmt.Printf("   Issue types: ")
 					types := []string{}
 					for _, it := range issueTypes {
-						if itMap, ok := it.(map[string]interface{}); ok {
+						if itMap, ok := it.(map[string]any); ok {
 							if name, ok := itMap["name"].(string); ok {
 								types = append(types, name)
 							}
@@ -1202,7 +1202,7 @@ func runJiraGetRemoteLinks(cmd *cobra.Command, args []string) error {
 
 		for i, link := range links {
 			id, _ := link["id"].(string)
-			obj, _ := link["object"].(map[string]interface{})
+			obj, _ := link["object"].(map[string]any)
 			url, _ := obj["url"].(string)
 			title, _ := obj["title"].(string)
 
@@ -1248,7 +1248,7 @@ func runJiraGetCreateMeta(cmd *cobra.Command, args []string) error {
 		fmt.Println(string(output))
 	} else {
 		// Pretty output - fields are returned as an array, not a map
-		fieldsArray, _ := metadata["fields"].([]interface{})
+		fieldsArray, _ := metadata["fields"].([]any)
 		if len(fieldsArray) == 0 {
 			fmt.Printf("No fields found for project %s issue type %s\n", projectKey, issueTypeID)
 			return nil
@@ -1257,11 +1257,11 @@ func runJiraGetCreateMeta(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Create metadata for project %s, issue type %s:\n\n", projectKey, issueTypeID)
 
 		// Separate required and optional fields
-		var requiredFields []interface{}
-		var optionalFields []interface{}
+		var requiredFields []any
+		var optionalFields []any
 
 		for _, fieldVal := range fieldsArray {
-			fieldMap, _ := fieldVal.(map[string]interface{})
+			fieldMap, _ := fieldVal.(map[string]any)
 			required, _ := fieldMap["required"].(bool)
 			if required {
 				requiredFields = append(requiredFields, fieldVal)
@@ -1274,7 +1274,7 @@ func runJiraGetCreateMeta(cmd *cobra.Command, args []string) error {
 		if len(requiredFields) > 0 {
 			fmt.Println("Required Fields:")
 			for _, fieldVal := range requiredFields {
-				fieldMap, _ := fieldVal.(map[string]interface{})
+				fieldMap, _ := fieldVal.(map[string]any)
 				key, _ := fieldMap["key"].(string)
 				printFieldInfo(fieldVal, key)
 			}
@@ -1284,7 +1284,7 @@ func runJiraGetCreateMeta(cmd *cobra.Command, args []string) error {
 		if len(optionalFields) > 0 {
 			fmt.Println("\nOptional Fields:")
 			for _, fieldVal := range optionalFields {
-				fieldMap, _ := fieldVal.(map[string]interface{})
+				fieldMap, _ := fieldVal.(map[string]any)
 				key, _ := fieldMap["key"].(string)
 				printFieldInfo(fieldVal, key)
 			}
@@ -1294,21 +1294,21 @@ func runJiraGetCreateMeta(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printFieldInfo(val interface{}, key string) {
-	fieldMap, _ := val.(map[string]interface{})
+func printFieldInfo(val any, key string) {
+	fieldMap, _ := val.(map[string]any)
 	name, _ := fieldMap["name"].(string)
-	schema, _ := fieldMap["schema"].(map[string]interface{})
+	schema, _ := fieldMap["schema"].(map[string]any)
 	fieldType, _ := schema["type"].(string)
 
 	fmt.Printf("\n  %s (%s)\n", name, key)
 	fmt.Printf("    Type: %s\n", fieldType)
 
 	// Show allowed values if present
-	allowedValues, _ := fieldMap["allowedValues"].([]interface{})
+	allowedValues, _ := fieldMap["allowedValues"].([]any)
 	if len(allowedValues) > 0 {
 		fmt.Printf("    Allowed values:\n")
 		for _, av := range allowedValues {
-			avMap, _ := av.(map[string]interface{})
+			avMap, _ := av.(map[string]any)
 			value, _ := avMap["value"].(string)
 			id, _ := avMap["id"].(string)
 			if value != "" {
@@ -1364,7 +1364,7 @@ func runJiraGetFieldOptions(cmd *cobra.Command, args []string) error {
 	} else {
 		// Pretty output
 		fieldName, _ := options["name"].(string)
-		allowedValues, _ := options["allowedValues"].([]interface{})
+		allowedValues, _ := options["allowedValues"].([]any)
 
 		if fieldName == "" {
 			fieldName = fieldKey
@@ -1379,7 +1379,7 @@ func runJiraGetFieldOptions(cmd *cobra.Command, args []string) error {
 
 		fmt.Println("Allowed values:")
 		for i, av := range allowedValues {
-			avMap, _ := av.(map[string]interface{})
+			avMap, _ := av.(map[string]any)
 			value, _ := avMap["value"].(string)
 			id, _ := avMap["id"].(string)
 

@@ -7,12 +7,12 @@ import (
 
 // ADFToText converts Atlassian Document Format (ADF) to plain text with basic formatting
 // ADF is used by both Jira and Confluence for rich text content
-func ADFToText(adf interface{}) string {
+func ADFToText(adf any) string {
 	if adf == nil {
 		return ""
 	}
 
-	doc, ok := adf.(map[string]interface{})
+	doc, ok := adf.(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -22,15 +22,15 @@ func ADFToText(adf interface{}) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
+func processNode(node map[string]any, sb *strings.Builder, indent int) {
 	nodeType, _ := node["type"].(string)
-	content, _ := node["content"].([]interface{})
+	content, _ := node["content"].([]any)
 
 	switch nodeType {
 	case "doc":
 		// Root document node
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
@@ -38,21 +38,21 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 	case "paragraph":
 		writeIndent(sb, indent)
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
 		sb.WriteString("\n")
 
 	case "heading":
-		level, _ := node["attrs"].(map[string]interface{})["level"].(float64)
+		level, _ := node["attrs"].(map[string]any)["level"].(float64)
 		sb.WriteString("\n")
 		writeIndent(sb, indent)
 		// Add heading markers
 		sb.WriteString(strings.Repeat("#", int(level)))
 		sb.WriteString(" ")
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
@@ -60,12 +60,12 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 
 	case "text":
 		text, _ := node["text"].(string)
-		marks, _ := node["marks"].([]interface{})
+		marks, _ := node["marks"].([]any)
 
 		// Apply text formatting based on marks
 		formatted := text
 		for _, mark := range marks {
-			if markMap, ok := mark.(map[string]interface{}); ok {
+			if markMap, ok := mark.(map[string]any); ok {
 				markType, _ := markMap["type"].(string)
 				switch markType {
 				case "strong":
@@ -83,7 +83,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 
 	case "bulletList":
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processListItem(childMap, sb, indent, "•")
 			}
 		}
@@ -91,7 +91,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 
 	case "orderedList":
 		for i, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				marker := fmt.Sprintf("%d.", i+1)
 				processListItem(childMap, sb, indent, marker)
 			}
@@ -101,7 +101,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 	case "listItem":
 		// Handled by parent list nodes
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
@@ -111,7 +111,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 		writeIndent(sb, indent)
 		sb.WriteString("```\n")
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
@@ -120,7 +120,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 
 	case "blockquote":
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				writeIndent(sb, indent)
 				sb.WriteString("> ")
 				processNode(childMap, sb, indent)
@@ -136,29 +136,29 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 		sb.WriteString("---\n")
 
 	case "mention":
-		attrs, _ := node["attrs"].(map[string]interface{})
+		attrs, _ := node["attrs"].(map[string]any)
 		text, _ := attrs["text"].(string)
 		sb.WriteString("@")
 		sb.WriteString(text)
 
 	case "emoji":
-		attrs, _ := node["attrs"].(map[string]interface{})
+		attrs, _ := node["attrs"].(map[string]any)
 		shortName, _ := attrs["shortName"].(string)
 		sb.WriteString(shortName)
 
 	case "inlineCard", "blockCard":
-		attrs, _ := node["attrs"].(map[string]interface{})
+		attrs, _ := node["attrs"].(map[string]any)
 		url, _ := attrs["url"].(string)
 		sb.WriteString(url)
 
 	case "panel":
-		attrs, _ := node["attrs"].(map[string]interface{})
+		attrs, _ := node["attrs"].(map[string]any)
 		panelType, _ := attrs["panelType"].(string)
 		sb.WriteString("\n")
 		writeIndent(sb, indent)
 		sb.WriteString(fmt.Sprintf("[%s]\n", strings.ToUpper(panelType)))
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent+2)
 			}
 		}
@@ -167,7 +167,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 	case "table":
 		// Simple table rendering - just show content
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
@@ -175,7 +175,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 	case "tableRow":
 		writeIndent(sb, indent)
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 				sb.WriteString(" | ")
 			}
@@ -184,7 +184,7 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 
 	case "tableHeader", "tableCell":
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
@@ -192,27 +192,27 @@ func processNode(node map[string]interface{}, sb *strings.Builder, indent int) {
 	default:
 		// For unknown nodes, process children if they exist
 		for _, child := range content {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				processNode(childMap, sb, indent)
 			}
 		}
 	}
 }
 
-func processListItem(node map[string]interface{}, sb *strings.Builder, indent int, marker string) {
-	content, _ := node["content"].([]interface{})
+func processListItem(node map[string]any, sb *strings.Builder, indent int, marker string) {
+	content, _ := node["content"].([]any)
 	writeIndent(sb, indent)
 	sb.WriteString(marker)
 	sb.WriteString(" ")
 
 	for _, child := range content {
-		if childMap, ok := child.(map[string]interface{}); ok {
+		if childMap, ok := child.(map[string]any); ok {
 			childType, _ := childMap["type"].(string)
 			if childType == "paragraph" {
 				// For paragraphs in list items, don't add extra newline
-				childContent, _ := childMap["content"].([]interface{})
+				childContent, _ := childMap["content"].([]any)
 				for _, grandChild := range childContent {
-					if grandChildMap, ok := grandChild.(map[string]interface{}); ok {
+					if grandChildMap, ok := grandChild.(map[string]any); ok {
 						processNode(grandChildMap, sb, indent)
 					}
 				}

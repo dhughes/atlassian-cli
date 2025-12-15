@@ -20,13 +20,13 @@ func TestADFToText_InvalidType(t *testing.T) {
 }
 
 func TestADFToText_SimpleParagraph(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "paragraph",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						"text": "Hello world",
 					},
@@ -56,16 +56,16 @@ func TestADFToText_Heading(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adf := map[string]interface{}{
+			adf := map[string]any{
 				"type": "doc",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "heading",
-						"attrs": map[string]interface{}{
+						"attrs": map[string]any{
 							"level": tt.level,
 						},
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "text",
 								"text": tt.text,
 							},
@@ -97,17 +97,17 @@ func TestADFToText_TextFormatting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adf := map[string]interface{}{
+			adf := map[string]any{
 				"type": "doc",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "paragraph",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "text",
 								"text": tt.text,
-								"marks": []interface{}{
-									map[string]interface{}{
+								"marks": []any{
+									map[string]any{
 										"type": tt.markType,
 									},
 								},
@@ -126,19 +126,19 @@ func TestADFToText_TextFormatting(t *testing.T) {
 }
 
 func TestADFToText_BulletList(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "bulletList",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "listItem",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "paragraph",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "text",
 										"text": "First item",
 									},
@@ -146,13 +146,13 @@ func TestADFToText_BulletList(t *testing.T) {
 							},
 						},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "listItem",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "paragraph",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "text",
 										"text": "Second item",
 									},
@@ -175,19 +175,19 @@ func TestADFToText_BulletList(t *testing.T) {
 }
 
 func TestADFToText_OrderedList(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "orderedList",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "listItem",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "paragraph",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "text",
 										"text": "First item",
 									},
@@ -195,13 +195,13 @@ func TestADFToText_OrderedList(t *testing.T) {
 							},
 						},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "listItem",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "paragraph",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "text",
 										"text": "Second item",
 									},
@@ -224,13 +224,13 @@ func TestADFToText_OrderedList(t *testing.T) {
 }
 
 func TestADFToText_CodeBlock(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "codeBlock",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						"text": "func main() {\n  fmt.Println(\"Hello\")\n}",
 					},
@@ -249,16 +249,16 @@ func TestADFToText_CodeBlock(t *testing.T) {
 }
 
 func TestADFToText_Blockquote(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "blockquote",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "paragraph",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "text",
 								"text": "Quoted text",
 							},
@@ -279,20 +279,20 @@ func TestADFToText_Blockquote(t *testing.T) {
 }
 
 func TestADFToText_HardBreak(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "paragraph",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						"text": "Line 1",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "hardBreak",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "text",
 						"text": "Line 2",
 					},
@@ -308,10 +308,10 @@ func TestADFToText_HardBreak(t *testing.T) {
 }
 
 func TestADFToText_Rule(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "rule",
 			},
 		},
@@ -324,15 +324,15 @@ func TestADFToText_Rule(t *testing.T) {
 }
 
 func TestADFToText_Mention(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "paragraph",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "mention",
-						"attrs": map[string]interface{}{
+						"attrs": map[string]any{
 							"text": "John Doe",
 						},
 					},
@@ -348,15 +348,15 @@ func TestADFToText_Mention(t *testing.T) {
 }
 
 func TestADFToText_Emoji(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "paragraph",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "emoji",
-						"attrs": map[string]interface{}{
+						"attrs": map[string]any{
 							"shortName": ":smile:",
 						},
 					},
@@ -372,19 +372,19 @@ func TestADFToText_Emoji(t *testing.T) {
 }
 
 func TestADFToText_Panel(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "panel",
-				"attrs": map[string]interface{}{
+				"attrs": map[string]any{
 					"panelType": "info",
 				},
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "paragraph",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "text",
 								"text": "Info message",
 							},
@@ -405,22 +405,22 @@ func TestADFToText_Panel(t *testing.T) {
 }
 
 func TestADFToText_Table(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "table",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "tableRow",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "tableHeader",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "paragraph",
-										"content": []interface{}{
-											map[string]interface{}{
+										"content": []any{
+											map[string]any{
 												"type": "text",
 												"text": "Header 1",
 											},
@@ -428,13 +428,13 @@ func TestADFToText_Table(t *testing.T) {
 									},
 								},
 							},
-							map[string]interface{}{
+							map[string]any{
 								"type": "tableHeader",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "paragraph",
-										"content": []interface{}{
-											map[string]interface{}{
+										"content": []any{
+											map[string]any{
 												"type": "text",
 												"text": "Header 2",
 											},
@@ -444,16 +444,16 @@ func TestADFToText_Table(t *testing.T) {
 							},
 						},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "tableRow",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "tableCell",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "paragraph",
-										"content": []interface{}{
-											map[string]interface{}{
+										"content": []any{
+											map[string]any{
 												"type": "text",
 												"text": "Cell 1",
 											},
@@ -461,13 +461,13 @@ func TestADFToText_Table(t *testing.T) {
 									},
 								},
 							},
-							map[string]interface{}{
+							map[string]any{
 								"type": "tableCell",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "paragraph",
-										"content": []interface{}{
-											map[string]interface{}{
+										"content": []any{
+											map[string]any{
 												"type": "text",
 												"text": "Cell 2",
 											},
@@ -495,53 +495,53 @@ func TestADFToText_Table(t *testing.T) {
 }
 
 func TestADFToText_ComplexDocument(t *testing.T) {
-	adf := map[string]interface{}{
+	adf := map[string]any{
 		"type": "doc",
-		"content": []interface{}{
-			map[string]interface{}{
+		"content": []any{
+			map[string]any{
 				"type": "heading",
-				"attrs": map[string]interface{}{
+				"attrs": map[string]any{
 					"level": float64(1),
 				},
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						"text": "Document Title",
 					},
 				},
 			},
-			map[string]interface{}{
+			map[string]any{
 				"type": "paragraph",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						"text": "This is ",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "text",
 						"text": "bold",
-						"marks": []interface{}{
-							map[string]interface{}{
+						"marks": []any{
+							map[string]any{
 								"type": "strong",
 							},
 						},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "text",
 						"text": " text.",
 					},
 				},
 			},
-			map[string]interface{}{
+			map[string]any{
 				"type": "bulletList",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "listItem",
-						"content": []interface{}{
-							map[string]interface{}{
+						"content": []any{
+							map[string]any{
 								"type": "paragraph",
-								"content": []interface{}{
-									map[string]interface{}{
+								"content": []any{
+									map[string]any{
 										"type": "text",
 										"text": "Item 1",
 									},
