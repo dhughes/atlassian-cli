@@ -260,6 +260,37 @@ go run . auth status
 go build -o atl . && ./atl auth status
 ```
 
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with verbose output
+go test ./... -v
+
+# Run tests with coverage
+go test ./... -cover
+
+# Run tests for a specific package
+go test ./internal/atlassian
+go test ./internal/config
+
+# Run a specific test
+go test ./internal/atlassian -run TestADFToText_SimpleParagraph
+```
+
+**Test Coverage:**
+- `internal/config`: 79.5% coverage
+- `internal/atlassian`: 41.5% coverage
+
+Tests include:
+- ADF (Atlassian Document Format) parsing and conversion
+- HTML to text conversion
+- Markdown to ADF conversion
+- Configuration management (load, save, account management)
+- API client functionality (with mocked HTTP responses)
+
 ## License
 
 MIT
