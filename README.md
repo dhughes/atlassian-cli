@@ -2,6 +2,8 @@
 
 A command-line interface for interacting with Atlassian Jira and Confluence APIs.
 
+> **Experimental Project**: This tool was developed as an experiment in using AI coding assistants (Claude Code) to generate functional CLI tools that interact with public REST APIs. The entire codebase, including comprehensive unit tests, was created through AI-assisted development.
+
 ## Why This Tool?
 
 The `atl` CLI was created to address practical challenges encountered with the official Atlassian MCP server, particularly frequent reauthentication requirements that disrupted workflows. Inspired by GitHub's `gh` CLI—which proved more reliable and useful than the GitHub MCP server—this project explores a similar approach for Atlassian products.
