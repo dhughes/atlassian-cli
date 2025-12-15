@@ -2,7 +2,7 @@
 
 A command-line interface for interacting with Atlassian Jira and Confluence APIs.
 
-> **Experimental Project**: This tool was developed as an experiment in using AI coding assistants (Claude Code) to generate functional CLI tools that interact with public REST APIs. The entire codebase, including comprehensive unit tests, was created through AI-assisted development.
+> **Experimental Project**: This tool was developed as an experiment in using AI coding assistants (Claude Code) to generate functional CLI tools that interact with public REST APIs. The entire codebase, including unit tests, was created through AI-assisted development.
 
 ## Why This Tool?
 
