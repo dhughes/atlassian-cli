@@ -100,14 +100,14 @@ func TestGetVisibleProjects_Success(t *testing.T) {
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
-			"values": []interface{}{
-				map[string]interface{}{
+		response := map[string]any{
+			"values": []any{
+				map[string]any{
 					"id":   "10000",
 					"key":  "ABC",
 					"name": "Test Project",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id":   "10001",
 					"key":  "XYZ",
 					"name": "Another Project",
@@ -170,11 +170,11 @@ func TestGetJiraIssue_Success(t *testing.T) {
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"key": "ABC-123",
-			"fields": map[string]interface{}{
+			"fields": map[string]any{
 				"summary": "Test Issue",
-				"status": map[string]interface{}{
+				"status": map[string]any{
 					"name": "To Do",
 				},
 			},
@@ -196,7 +196,7 @@ func TestGetJiraIssue_Success(t *testing.T) {
 		t.Errorf("Expected issue key 'ABC-123', got %v", issue["key"])
 	}
 
-	fields, ok := issue["fields"].(map[string]interface{})
+	fields, ok := issue["fields"].(map[string]any)
 	if !ok {
 		t.Fatal("Expected fields map")
 	}
@@ -224,24 +224,24 @@ func TestCreateJiraIssue_Success(t *testing.T) {
 		}
 
 		// Parse request body
-		var requestBody map[string]interface{}
+		var requestBody map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Failed to decode request body: %v", err)
 		}
 
 		// Verify request structure
-		fields, ok := requestBody["fields"].(map[string]interface{})
+		fields, ok := requestBody["fields"].(map[string]any)
 		if !ok {
 			t.Fatal("Expected fields in request body")
 		}
 
-		project, ok := fields["project"].(map[string]interface{})
+		project, ok := fields["project"].(map[string]any)
 		if !ok || project["key"] != "ABC" {
 			t.Error("Expected project key 'ABC' in request")
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"key": "ABC-124",
 			"id":  "10100",
 		}
@@ -292,17 +292,17 @@ func TestSearchJiraIssuesJQL_Success(t *testing.T) {
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
-			"issues": []interface{}{
-				map[string]interface{}{
+		response := map[string]any{
+			"issues": []any{
+				map[string]any{
 					"key": "ABC-100",
-					"fields": map[string]interface{}{
+					"fields": map[string]any{
 						"summary": "First Issue",
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"key": "ABC-101",
-					"fields": map[string]interface{}{
+					"fields": map[string]any{
 						"summary": "Second Issue",
 					},
 				},
@@ -322,7 +322,7 @@ func TestSearchJiraIssuesJQL_Success(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	issues, ok := result["issues"].([]interface{})
+	issues, ok := result["issues"].([]any)
 	if !ok {
 		t.Fatal("Expected issues array in result")
 	}
@@ -344,11 +344,11 @@ func TestGetConfluencePage_Success(t *testing.T) {
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":    "123",
 			"title": "Test Page",
-			"body": map[string]interface{}{
-				"storage": map[string]interface{}{
+			"body": map[string]any{
+				"storage": map[string]any{
 					"value": "<p>Page content</p>",
 				},
 			},
@@ -386,9 +386,9 @@ func TestGetConfluenceSpaces_Success(t *testing.T) {
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
-			"results": []interface{}{
-				map[string]interface{}{
+		response := map[string]any{
+			"results": []any{
+				map[string]any{
 					"id":   "100",
 					"key":  "TEST",
 					"name": "Test Space",
@@ -408,7 +408,7 @@ func TestGetConfluenceSpaces_Success(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	results, ok := result["results"].([]interface{})
+	results, ok := result["results"].([]any)
 	if !ok {
 		t.Fatal("Expected results array in response")
 	}
@@ -417,7 +417,7 @@ func TestGetConfluenceSpaces_Success(t *testing.T) {
 		t.Errorf("Expected 1 space, got %d", len(results))
 	}
 
-	space, ok := results[0].(map[string]interface{})
+	space, ok := results[0].(map[string]any)
 	if !ok {
 		t.Fatal("Expected space to be a map")
 	}
@@ -447,29 +447,29 @@ func TestGetCreateMeta_Success(t *testing.T) {
 		}
 
 		// Return mock response
-		response := map[string]interface{}{
-			"fields": []interface{}{
-				map[string]interface{}{
+		response := map[string]any{
+			"fields": []any{
+				map[string]any{
 					"key":      "summary",
 					"name":     "Summary",
 					"required": true,
-					"schema": map[string]interface{}{
+					"schema": map[string]any{
 						"type": "string",
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"key":      "customfield_10369",
 					"name":     "Portfolio Work Type",
 					"required": true,
-					"schema": map[string]interface{}{
+					"schema": map[string]any{
 						"type": "option",
 					},
-					"allowedValues": []interface{}{
-						map[string]interface{}{
+					"allowedValues": []any{
+						map[string]any{
 							"id":    "10689",
 							"value": "Growth",
 						},
-						map[string]interface{}{
+						map[string]any{
 							"id":    "10690",
 							"value": "KTLO",
 						},
@@ -490,7 +490,7 @@ func TestGetCreateMeta_Success(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	fields, ok := metadata["fields"].([]interface{})
+	fields, ok := metadata["fields"].([]any)
 	if !ok {
 		t.Fatal("Expected fields array in metadata")
 	}
@@ -502,7 +502,7 @@ func TestGetCreateMeta_Success(t *testing.T) {
 	// Check for custom field
 	found := false
 	for _, field := range fields {
-		fieldMap, ok := field.(map[string]interface{})
+		fieldMap, ok := field.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -525,17 +525,17 @@ func TestGetFieldOptions_Success(t *testing.T) {
 		// This will be called twice - once for issue types, once for create meta
 		if strings.Contains(r.URL.Path, "/issuetypes/10002") {
 			// Return createmeta response
-			response := map[string]interface{}{
-				"fields": []interface{}{
-					map[string]interface{}{
+			response := map[string]any{
+				"fields": []any{
+					map[string]any{
 						"key":  "customfield_10369",
 						"name": "Portfolio Work Type",
-						"allowedValues": []interface{}{
-							map[string]interface{}{
+						"allowedValues": []any{
+							map[string]any{
 								"id":    "10689",
 								"value": "Growth",
 							},
-							map[string]interface{}{
+							map[string]any{
 								"id":    "10690",
 								"value": "KTLO",
 							},
@@ -547,9 +547,9 @@ func TestGetFieldOptions_Success(t *testing.T) {
 			json.NewEncoder(w).Encode(response)
 		} else if strings.Contains(r.URL.Path, "/issuetypes") {
 			// Return issue types response
-			response := map[string]interface{}{
-				"values": []interface{}{
-					map[string]interface{}{
+			response := map[string]any{
+				"values": []any{
+					map[string]any{
 						"id":   "10002",
 						"name": "Task",
 					},
@@ -572,7 +572,7 @@ func TestGetFieldOptions_Success(t *testing.T) {
 		t.Errorf("Expected field name 'Portfolio Work Type', got %v", fieldInfo["name"])
 	}
 
-	allowedValues, ok := fieldInfo["allowedValues"].([]interface{})
+	allowedValues, ok := fieldInfo["allowedValues"].([]any)
 	if !ok {
 		t.Fatal("Expected allowedValues array")
 	}

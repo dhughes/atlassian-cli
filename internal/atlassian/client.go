@@ -97,7 +97,7 @@ func (c *Client) GetAccessibleResources() ([]AccessibleResource, error) {
 // FetchByARI fetches a resource by its ARI (Atlassian Resource Identifier)
 // Note: There is no generic fetch-by-ARI endpoint in the REST API
 // This is a placeholder for MCP parity
-func (c *Client) FetchByARI(ari string) (map[string]interface{}, error) {
+func (c *Client) FetchByARI(ari string) (map[string]any, error) {
 	return nil, fmt.Errorf("fetch by ARI not implemented - use product-specific commands instead")
 }
 
@@ -150,7 +150,7 @@ type GetIssueOptions struct {
 }
 
 // GetJiraIssue retrieves a Jira issue by its key or ID
-func (c *Client) GetJiraIssue(issueKey string, opts *GetIssueOptions) (map[string]interface{}, error) {
+func (c *Client) GetJiraIssue(issueKey string, opts *GetIssueOptions) (map[string]any, error) {
 	apiURL := fmt.Sprintf("%s/rest/api/3/issue/%s", c.BaseURL, issueKey)
 
 	// Add query parameters
@@ -187,7 +187,7 @@ func (c *Client) GetJiraIssue(issueKey string, opts *GetIssueOptions) (map[strin
 		return nil, fmt.Errorf("failed to get issue (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var issue map[string]interface{}
+	var issue map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&issue); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -203,7 +203,7 @@ type SearchJQLOptions struct {
 }
 
 // SearchJiraIssuesJQL searches for Jira issues using JQL (Jira Query Language)
-func (c *Client) SearchJiraIssuesJQL(jql string, opts *SearchJQLOptions) (map[string]interface{}, error) {
+func (c *Client) SearchJiraIssuesJQL(jql string, opts *SearchJQLOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/rest/api/3/search/jql", c.BaseURL)
 
 	// Build query parameters using url.Values for proper encoding
@@ -245,7 +245,7 @@ func (c *Client) SearchJiraIssuesJQL(jql string, opts *SearchJQLOptions) (map[st
 		return nil, fmt.Errorf("failed to search issues (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -262,19 +262,19 @@ type CreateIssueOptions struct {
 	AssigneeID  string
 	ParentKey   string
 	PriorityID  string
-	Fields      map[string]interface{} // Additional custom fields
+	Fields      map[string]any // Additional custom fields
 }
 
 // CreateJiraIssue creates a new Jira issue
-func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface{}, error) {
+func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]any, error) {
 	url := fmt.Sprintf("%s/rest/api/3/issue", c.BaseURL)
 
 	// Build request body
-	fields := map[string]interface{}{
-		"project": map[string]interface{}{
+	fields := map[string]any{
+		"project": map[string]any{
 			"key": opts.ProjectKey,
 		},
-		"issuetype": map[string]interface{}{
+		"issuetype": map[string]any{
 			"name": opts.IssueType,
 		},
 		"summary": opts.Summary,
@@ -291,19 +291,19 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface
 	}
 
 	if opts.AssigneeID != "" {
-		fields["assignee"] = map[string]interface{}{
+		fields["assignee"] = map[string]any{
 			"id": opts.AssigneeID,
 		}
 	}
 
 	if opts.ParentKey != "" {
-		fields["parent"] = map[string]interface{}{
+		fields["parent"] = map[string]any{
 			"key": opts.ParentKey,
 		}
 	}
 
 	if opts.PriorityID != "" {
-		fields["priority"] = map[string]interface{}{
+		fields["priority"] = map[string]any{
 			"id": opts.PriorityID,
 		}
 	}
@@ -315,7 +315,7 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface
 		}
 	}
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"fields": fields,
 	}
 
@@ -335,7 +335,7 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]interface
 		return nil, fmt.Errorf("failed to create issue (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -351,19 +351,19 @@ type AddCommentOptions struct {
 }
 
 // AddCommentToIssue adds a comment to a Jira issue
-func (c *Client) AddCommentToIssue(issueKey string, opts *AddCommentOptions) (map[string]interface{}, error) {
+func (c *Client) AddCommentToIssue(issueKey string, opts *AddCommentOptions) (map[string]any, error) {
 	url := fmt.Sprintf("%s/rest/api/3/issue/%s/comment", c.BaseURL, issueKey)
 
 	// Build comment body in ADF format
-	body := map[string]interface{}{
-		"body": map[string]interface{}{
+	body := map[string]any{
+		"body": map[string]any{
 			"type":    "doc",
 			"version": 1,
-			"content": []interface{}{
-				map[string]interface{}{
+			"content": []any{
+				map[string]any{
 					"type": "paragraph",
-					"content": []interface{}{
-						map[string]interface{}{
+					"content": []any{
+						map[string]any{
 							"type": "text",
 							"text": opts.Comment,
 						},
@@ -375,7 +375,7 @@ func (c *Client) AddCommentToIssue(issueKey string, opts *AddCommentOptions) (ma
 
 	// Add visibility if specified
 	if opts.VisibilityType != "" && opts.VisibilityValue != "" {
-		body["visibility"] = map[string]interface{}{
+		body["visibility"] = map[string]any{
 			"type":  opts.VisibilityType,
 			"value": opts.VisibilityValue,
 		}
@@ -397,7 +397,7 @@ func (c *Client) AddCommentToIssue(issueKey string, opts *AddCommentOptions) (ma
 		return nil, fmt.Errorf("failed to add comment (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -406,10 +406,10 @@ func (c *Client) AddCommentToIssue(issueKey string, opts *AddCommentOptions) (ma
 }
 
 // EditJiraIssue updates fields on a Jira issue
-func (c *Client) EditJiraIssue(issueKey string, fields map[string]interface{}) error {
+func (c *Client) EditJiraIssue(issueKey string, fields map[string]any) error {
 	url := fmt.Sprintf("%s/rest/api/3/issue/%s", c.BaseURL, issueKey)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"fields": fields,
 	}
 
@@ -442,7 +442,7 @@ type GetTransitionsOptions struct {
 }
 
 // GetIssueTransitions gets available transitions for an issue
-func (c *Client) GetIssueTransitions(issueKey string, opts *GetTransitionsOptions) (map[string]interface{}, error) {
+func (c *Client) GetIssueTransitions(issueKey string, opts *GetTransitionsOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
 
 	params := url.Values{}
@@ -480,7 +480,7 @@ func (c *Client) GetIssueTransitions(issueKey string, opts *GetTransitionsOption
 		return nil, fmt.Errorf("failed to get transitions (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -491,17 +491,17 @@ func (c *Client) GetIssueTransitions(issueKey string, opts *GetTransitionsOption
 // TransitionIssueOptions contains parameters for transitioning an issue
 type TransitionIssueOptions struct {
 	TransitionID    string
-	Fields          map[string]interface{}
-	Update          map[string]interface{}
-	HistoryMetadata map[string]interface{}
+	Fields          map[string]any
+	Update          map[string]any
+	HistoryMetadata map[string]any
 }
 
 // TransitionIssue transitions an issue to a new status
 func (c *Client) TransitionIssue(issueKey string, opts *TransitionIssueOptions) error {
 	url := fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", c.BaseURL, issueKey)
 
-	body := map[string]interface{}{
-		"transition": map[string]interface{}{
+	body := map[string]any{
+		"transition": map[string]any{
 			"id": opts.TransitionID,
 		},
 	}
@@ -537,7 +537,7 @@ func (c *Client) TransitionIssue(issueKey string, opts *TransitionIssueOptions) 
 }
 
 // LookupAccountID searches for Jira users by display name or email
-func (c *Client) LookupAccountID(searchString string) ([]map[string]interface{}, error) {
+func (c *Client) LookupAccountID(searchString string) ([]map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/rest/api/3/user/search", c.BaseURL)
 
 	params := url.Values{}
@@ -556,7 +556,7 @@ func (c *Client) LookupAccountID(searchString string) ([]map[string]interface{},
 		return nil, fmt.Errorf("failed to lookup account (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var users []map[string]interface{}
+	var users []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -574,7 +574,7 @@ type GetVisibleProjectsOptions struct {
 }
 
 // GetVisibleProjects lists projects the user has access to
-func (c *Client) GetVisibleProjects(opts *GetVisibleProjectsOptions) ([]map[string]interface{}, error) {
+func (c *Client) GetVisibleProjects(opts *GetVisibleProjectsOptions) ([]map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/rest/api/3/project/search", c.BaseURL)
 
 	params := url.Values{}
@@ -613,16 +613,16 @@ func (c *Client) GetVisibleProjects(opts *GetVisibleProjectsOptions) ([]map[stri
 		return nil, fmt.Errorf("failed to get projects (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Extract values array
-	values, _ := result["values"].([]interface{})
-	projects := make([]map[string]interface{}, 0, len(values))
+	values, _ := result["values"].([]any)
+	projects := make([]map[string]any, 0, len(values))
 	for _, v := range values {
-		if proj, ok := v.(map[string]interface{}); ok {
+		if proj, ok := v.(map[string]any); ok {
 			projects = append(projects, proj)
 		}
 	}
@@ -637,7 +637,7 @@ type GetProjectIssueTypesOptions struct {
 }
 
 // GetProjectIssueTypes gets issue type metadata for a project
-func (c *Client) GetProjectIssueTypes(projectKey string, opts *GetProjectIssueTypesOptions) ([]map[string]interface{}, error) {
+func (c *Client) GetProjectIssueTypes(projectKey string, opts *GetProjectIssueTypesOptions) ([]map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/rest/api/3/issue/createmeta/%s/issuetypes", c.BaseURL, projectKey)
 
 	params := url.Values{}
@@ -666,16 +666,16 @@ func (c *Client) GetProjectIssueTypes(projectKey string, opts *GetProjectIssueTy
 		return nil, fmt.Errorf("failed to get issue types (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Extract values array
-	values, _ := result["values"].([]interface{})
-	issueTypes := make([]map[string]interface{}, 0, len(values))
+	values, _ := result["values"].([]any)
+	issueTypes := make([]map[string]any, 0, len(values))
 	for _, v := range values {
-		if it, ok := v.(map[string]interface{}); ok {
+		if it, ok := v.(map[string]any); ok {
 			issueTypes = append(issueTypes, it)
 		}
 	}
@@ -689,7 +689,7 @@ type GetRemoteLinksOptions struct {
 }
 
 // GetIssueRemoteLinks gets remote links for a Jira issue
-func (c *Client) GetIssueRemoteLinks(issueKey string, opts *GetRemoteLinksOptions) ([]map[string]interface{}, error) {
+func (c *Client) GetIssueRemoteLinks(issueKey string, opts *GetRemoteLinksOptions) ([]map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/rest/api/3/issue/%s/remotelink", c.BaseURL, issueKey)
 
 	params := url.Values{}
@@ -713,7 +713,7 @@ func (c *Client) GetIssueRemoteLinks(issueKey string, opts *GetRemoteLinksOption
 		return nil, fmt.Errorf("failed to get remote links (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var links []map[string]interface{}
+	var links []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&links); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -732,7 +732,7 @@ type SearchCQLOptions struct {
 }
 
 // SearchConfluenceCQL searches Confluence content using CQL (Confluence Query Language)
-func (c *Client) SearchConfluenceCQL(cql string, opts *SearchCQLOptions) (map[string]interface{}, error) {
+func (c *Client) SearchConfluenceCQL(cql string, opts *SearchCQLOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/search", c.BaseURL)
 
 	// Build query parameters using url.Values for proper encoding
@@ -777,7 +777,7 @@ func (c *Client) SearchConfluenceCQL(cql string, opts *SearchCQLOptions) (map[st
 		return nil, fmt.Errorf("failed to search content (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -791,7 +791,7 @@ type GetPageOptions struct {
 }
 
 // GetConfluencePage retrieves a Confluence page by ID
-func (c *Client) GetConfluencePage(pageID string, opts *GetPageOptions) (map[string]interface{}, error) {
+func (c *Client) GetConfluencePage(pageID string, opts *GetPageOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s", c.BaseURL, pageID)
 
 	// Request body content expanded
@@ -816,7 +816,7 @@ func (c *Client) GetConfluencePage(pageID string, opts *GetPageOptions) (map[str
 		return nil, fmt.Errorf("failed to get page (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -841,7 +841,7 @@ type GetSpacesOptions struct {
 }
 
 // GetConfluenceSpaces retrieves Confluence spaces
-func (c *Client) GetConfluenceSpaces(opts *GetSpacesOptions) (map[string]interface{}, error) {
+func (c *Client) GetConfluenceSpaces(opts *GetSpacesOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/space", c.BaseURL)
 
 	params := url.Values{}
@@ -906,7 +906,7 @@ func (c *Client) GetConfluenceSpaces(opts *GetSpacesOptions) (map[string]interfa
 		return nil, fmt.Errorf("failed to get spaces (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -927,7 +927,7 @@ type GetPagesInSpaceOptions struct {
 }
 
 // GetPagesInSpace retrieves pages within a Confluence space
-func (c *Client) GetPagesInSpace(opts *GetPagesInSpaceOptions) (map[string]interface{}, error) {
+func (c *Client) GetPagesInSpace(opts *GetPagesInSpaceOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
 
 	params := url.Values{}
@@ -972,7 +972,7 @@ func (c *Client) GetPagesInSpace(opts *GetPagesInSpaceOptions) (map[string]inter
 		return nil, fmt.Errorf("failed to get pages (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -990,17 +990,17 @@ type CreatePageOptions struct {
 }
 
 // CreateConfluencePage creates a new Confluence page
-func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]interface{}, error) {
+func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]any, error) {
 	apiURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"type":  "page",
 		"title": opts.Title,
-		"space": map[string]interface{}{
+		"space": map[string]any{
 			"key": opts.SpaceKey,
 		},
-		"body": map[string]interface{}{
-			"storage": map[string]interface{}{
+		"body": map[string]any{
+			"storage": map[string]any{
 				"value":          opts.Body,
 				"representation": "storage",
 			},
@@ -1008,17 +1008,17 @@ func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]inter
 	}
 
 	if opts.ParentID != "" {
-		body["ancestors"] = []interface{}{
-			map[string]interface{}{
+		body["ancestors"] = []any{
+			map[string]any{
 				"id": opts.ParentID,
 			},
 		}
 	}
 
 	if opts.IsPrivate {
-		body["metadata"] = map[string]interface{}{
-			"properties": map[string]interface{}{
-				"editor": map[string]interface{}{
+		body["metadata"] = map[string]any{
+			"properties": map[string]any{
+				"editor": map[string]any{
 					"key":   "editor",
 					"value": "v2",
 				},
@@ -1043,7 +1043,7 @@ func (c *Client) CreateConfluencePage(opts *CreatePageOptions) (map[string]inter
 		return nil, fmt.Errorf("failed to create page (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1064,17 +1064,17 @@ type UpdatePageOptions struct {
 }
 
 // UpdateConfluencePage updates an existing Confluence page
-func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]interface{}, error) {
+func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]any, error) {
 	apiURL := fmt.Sprintf("%s/wiki/rest/api/content/%s", c.BaseURL, opts.PageID)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"type":  "page",
 		"title": opts.Title,
-		"version": map[string]interface{}{
+		"version": map[string]any{
 			"number": opts.Version,
 		},
-		"body": map[string]interface{}{
-			"storage": map[string]interface{}{
+		"body": map[string]any{
+			"storage": map[string]any{
 				"value":          opts.Body,
 				"representation": "storage",
 			},
@@ -1082,19 +1082,19 @@ func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]inter
 	}
 
 	if opts.VersionMessage != "" {
-		body["version"].(map[string]interface{})["message"] = opts.VersionMessage
+		body["version"].(map[string]any)["message"] = opts.VersionMessage
 	}
 
 	if opts.ParentID != "" {
-		body["ancestors"] = []interface{}{
-			map[string]interface{}{
+		body["ancestors"] = []any{
+			map[string]any{
 				"id": opts.ParentID,
 			},
 		}
 	}
 
 	if opts.SpaceKey != "" {
-		body["space"] = map[string]interface{}{
+		body["space"] = map[string]any{
 			"key": opts.SpaceKey,
 		}
 	}
@@ -1119,7 +1119,7 @@ func (c *Client) UpdateConfluencePage(opts *UpdatePageOptions) (map[string]inter
 		return nil, fmt.Errorf("failed to update page (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1137,17 +1137,17 @@ type AddPageCommentOptions struct {
 }
 
 // AddConfluencePageComment adds a comment to a Confluence page
-func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[string]interface{}, error) {
+func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[string]any, error) {
 	apiURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"type": "comment",
-		"container": map[string]interface{}{
+		"container": map[string]any{
 			"id":   opts.PageID,
 			"type": "page",
 		},
-		"body": map[string]interface{}{
-			"storage": map[string]interface{}{
+		"body": map[string]any{
+			"storage": map[string]any{
 				"value":          opts.Comment,
 				"representation": "storage",
 			},
@@ -1156,7 +1156,7 @@ func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[stri
 
 	// Add optional parameters
 	if opts.ParentCommentID != "" {
-		body["container"] = map[string]interface{}{
+		body["container"] = map[string]any{
 			"id":   opts.ParentCommentID,
 			"type": "comment",
 		}
@@ -1179,7 +1179,7 @@ func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[stri
 		return nil, fmt.Errorf("failed to add comment (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1188,7 +1188,7 @@ func (c *Client) AddConfluencePageComment(opts *AddPageCommentOptions) (map[stri
 }
 
 // GetPageAncestors gets the parent pages of a Confluence page
-func (c *Client) GetPageAncestors(pageID string) ([]map[string]interface{}, error) {
+func (c *Client) GetPageAncestors(pageID string) ([]map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s/ancestor", c.BaseURL, pageID)
 
 	resp, err := c.doRequest("GET", baseURL, nil)
@@ -1202,7 +1202,7 @@ func (c *Client) GetPageAncestors(pageID string) ([]map[string]interface{}, erro
 		return nil, fmt.Errorf("failed to get ancestors (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var ancestors []map[string]interface{}
+	var ancestors []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&ancestors); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1217,7 +1217,7 @@ type GetPageDescendantsOptions struct {
 }
 
 // GetPageDescendants gets child pages of a Confluence page
-func (c *Client) GetPageDescendants(pageID string, opts *GetPageDescendantsOptions) (map[string]interface{}, error) {
+func (c *Client) GetPageDescendants(pageID string, opts *GetPageDescendantsOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s/descendant/page", c.BaseURL, pageID)
 
 	params := url.Values{}
@@ -1246,7 +1246,7 @@ func (c *Client) GetPageDescendants(pageID string, opts *GetPageDescendantsOptio
 		return nil, fmt.Errorf("failed to get descendants (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1262,7 +1262,7 @@ type GetPageCommentsOptions struct {
 }
 
 // GetPageComments gets comments for a Confluence page
-func (c *Client) GetPageComments(pageID string, opts *GetPageCommentsOptions) (map[string]interface{}, error) {
+func (c *Client) GetPageComments(pageID string, opts *GetPageCommentsOptions) (map[string]any, error) {
 	baseURL := fmt.Sprintf("%s/wiki/rest/api/content/%s/child/comment", c.BaseURL, pageID)
 
 	params := url.Values{}
@@ -1294,7 +1294,7 @@ func (c *Client) GetPageComments(pageID string, opts *GetPageCommentsOptions) (m
 		return nil, fmt.Errorf("failed to get comments (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1312,17 +1312,17 @@ type CreateInlineCommentOptions struct {
 }
 
 // CreateInlineComment creates an inline comment on a Confluence page
-func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[string]interface{}, error) {
+func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[string]any, error) {
 	apiURL := fmt.Sprintf("%s/wiki/rest/api/content", c.BaseURL)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"type": "comment",
-		"container": map[string]interface{}{
+		"container": map[string]any{
 			"id":   opts.PageID,
 			"type": "page",
 		},
-		"body": map[string]interface{}{
-			"storage": map[string]interface{}{
+		"body": map[string]any{
+			"storage": map[string]any{
 				"value":          opts.Comment,
 				"representation": "storage",
 			},
@@ -1331,9 +1331,9 @@ func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[stri
 
 	// Add inline comment properties
 	if opts.TextSelection != "" {
-		body["metadata"] = map[string]interface{}{
-			"properties": map[string]interface{}{
-				"inline-comment-properties": map[string]interface{}{
+		body["metadata"] = map[string]any{
+			"properties": map[string]any{
+				"inline-comment-properties": map[string]any{
 					"textSelection":           opts.TextSelection,
 					"textSelectionMatchIndex": opts.TextSelectionMatchIndex,
 					"textSelectionMatchCount": opts.TextSelectionMatchCount,
@@ -1358,7 +1358,7 @@ func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[stri
 		return nil, fmt.Errorf("failed to create inline comment (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1367,7 +1367,7 @@ func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[stri
 }
 
 // GetCreateMeta gets field metadata for creating issues of a specific type
-func (c *Client) GetCreateMeta(projectKey string, issueTypeID string) (map[string]interface{}, error) {
+func (c *Client) GetCreateMeta(projectKey string, issueTypeID string) (map[string]any, error) {
 	apiURL := fmt.Sprintf("%s/rest/api/3/issue/createmeta/%s/issuetypes/%s", c.BaseURL, projectKey, issueTypeID)
 
 	resp, err := c.doRequest("GET", apiURL, nil)
@@ -1381,7 +1381,7 @@ func (c *Client) GetCreateMeta(projectKey string, issueTypeID string) (map[strin
 		return nil, fmt.Errorf("failed to get create metadata (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -1392,7 +1392,7 @@ func (c *Client) GetCreateMeta(projectKey string, issueTypeID string) (map[strin
 // GetFieldOptions gets allowed values for a custom field
 // Requires project key and issue type ID to retrieve field configuration
 // Uses createmeta API to retrieve field configuration
-func (c *Client) GetFieldOptions(fieldKey string, projectKey string, issueTypeID string) (map[string]interface{}, error) {
+func (c *Client) GetFieldOptions(fieldKey string, projectKey string, issueTypeID string) (map[string]any, error) {
 	if projectKey == "" {
 		return nil, fmt.Errorf("project key is required to get field options")
 	}
@@ -1414,15 +1414,15 @@ func (c *Client) GetFieldOptions(fieldKey string, projectKey string, issueTypeID
 		return nil, fmt.Errorf("failed to get create metadata (status %d): %s", resp2.StatusCode, string(body))
 	}
 
-	var createMetaResult map[string]interface{}
+	var createMetaResult map[string]any
 	if err := json.NewDecoder(resp2.Body).Decode(&createMetaResult); err != nil {
 		return nil, fmt.Errorf("failed to decode create metadata response: %w", err)
 	}
 
 	// Search for the field in the fields array
-	fieldsArray, _ := createMetaResult["fields"].([]interface{})
+	fieldsArray, _ := createMetaResult["fields"].([]any)
 	for _, fieldVal := range fieldsArray {
-		fieldMap, _ := fieldVal.(map[string]interface{})
+		fieldMap, _ := fieldVal.(map[string]any)
 		key, _ := fieldMap["key"].(string)
 		if key == fieldKey {
 			return fieldMap, nil
