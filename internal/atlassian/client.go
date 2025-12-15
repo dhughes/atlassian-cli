@@ -1365,3 +1365,69 @@ func (c *Client) CreateInlineComment(opts *CreateInlineCommentOptions) (map[stri
 
 	return result, nil
 }
+
+// GetCreateMeta gets field metadata for creating issues of a specific type
+func (c *Client) GetCreateMeta(projectKey string, issueTypeID string) (map[string]interface{}, error) {
+	apiURL := fmt.Sprintf("%s/rest/api/3/issue/createmeta/%s/issuetypes/%s", c.BaseURL, projectKey, issueTypeID)
+
+	resp, err := c.doRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get create metadata (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetFieldOptions gets allowed values for a custom field
+// Requires project key and issue type ID to retrieve field configuration
+// Uses createmeta API to retrieve field configuration
+func (c *Client) GetFieldOptions(fieldKey string, projectKey string, issueTypeID string) (map[string]interface{}, error) {
+	if projectKey == "" {
+		return nil, fmt.Errorf("project key is required to get field options")
+	}
+	if issueTypeID == "" {
+		return nil, fmt.Errorf("issue type ID is required to get field options")
+	}
+
+	// Get createmeta for this issue type
+	createMetaURL := fmt.Sprintf("%s/rest/api/3/issue/createmeta/%s/issuetypes/%s", c.BaseURL, projectKey, issueTypeID)
+
+	resp2, err := c.doRequest("GET", createMetaURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp2.Body)
+		return nil, fmt.Errorf("failed to get create metadata (status %d): %s", resp2.StatusCode, string(body))
+	}
+
+	var createMetaResult map[string]interface{}
+	if err := json.NewDecoder(resp2.Body).Decode(&createMetaResult); err != nil {
+		return nil, fmt.Errorf("failed to decode create metadata response: %w", err)
+	}
+
+	// Search for the field in the fields array
+	fieldsArray, _ := createMetaResult["fields"].([]interface{})
+	for _, fieldVal := range fieldsArray {
+		fieldMap, _ := fieldVal.(map[string]interface{})
+		key, _ := fieldMap["key"].(string)
+		if key == fieldKey {
+			return fieldMap, nil
+		}
+	}
+
+	return nil, fmt.Errorf("field %s not found in project %s", fieldKey, projectKey)
+}

@@ -169,6 +169,36 @@ Examples:
 	RunE: runJiraGetRemoteLinks,
 }
 
+var jiraGetCreateMetaCmd = &cobra.Command{
+	Use:   "get-create-meta <projectKey> <issueTypeId>",
+	Short: "Get create metadata for an issue type",
+	Long: `Get field metadata including allowed values for creating issues.
+
+This shows all fields (required and optional) and their constraints,
+including allowed values for custom fields like select lists.
+
+Examples:
+  atl jira get-create-meta FX 10001
+  atl jira get-create-meta FX 10001 --json`,
+	Args: cobra.ExactArgs(2),
+	RunE: runJiraGetCreateMeta,
+}
+
+var jiraGetFieldOptionsCmd = &cobra.Command{
+	Use:   "get-field-options <fieldKey>",
+	Short: "Get allowed values for a custom field",
+	Long: `Get allowed values for a custom select field.
+
+Field keys are typically in the format "customfield_XXXXX".
+Requires --project and --issue-type-id flags.
+
+Examples:
+  atl jira get-field-options customfield_10369 --project FX --issue-type-id 10002
+  atl jira get-field-options customfield_10369 --project FX --issue-type-id 10002 --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraGetFieldOptions,
+}
+
 var (
 	// Flags for get-issue
 	jiraGetIssueFields         []string
@@ -227,6 +257,10 @@ var (
 
 	// Flags for get-remote-links
 	jiraRemoteLinksGlobalID string
+
+	// Flags for get-field-options
+	jiraFieldOptionsProject     string
+	jiraFieldOptionsIssueTypeID string
 )
 
 func init() {
@@ -242,6 +276,8 @@ func init() {
 	jiraCmd.AddCommand(jiraGetProjectsCmd)
 	jiraCmd.AddCommand(jiraGetProjectIssueTypesCmd)
 	jiraCmd.AddCommand(jiraGetRemoteLinksCmd)
+	jiraCmd.AddCommand(jiraGetCreateMetaCmd)
+	jiraCmd.AddCommand(jiraGetFieldOptionsCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -315,6 +351,14 @@ func init() {
 	// Flags for get-remote-links
 	jiraGetRemoteLinksCmd.Flags().StringVar(&jiraRemoteLinksGlobalID, "global-id", "", "Filter by global ID")
 	jiraGetRemoteLinksCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-create-meta
+	jiraGetCreateMetaCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-field-options
+	jiraGetFieldOptionsCmd.Flags().StringVar(&jiraFieldOptionsProject, "project", "", "Project key for context (required)")
+	jiraGetFieldOptionsCmd.Flags().StringVar(&jiraFieldOptionsIssueTypeID, "issue-type-id", "", "Issue type ID for context (required)")
+	jiraGetFieldOptionsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -1165,6 +1209,187 @@ func runJiraGetRemoteLinks(cmd *cobra.Command, args []string) error {
 			fmt.Printf("%d. %s\n", i+1, title)
 			fmt.Printf("   URL: %s\n", url)
 			fmt.Printf("   ID: %s\n", id)
+			fmt.Println()
+		}
+	}
+
+	return nil
+}
+
+func runJiraGetCreateMeta(cmd *cobra.Command, args []string) error {
+	projectKey := args[0]
+	issueTypeID := args[1]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get create metadata
+	metadata, err := client.GetCreateMeta(projectKey, issueTypeID)
+	if err != nil {
+		return fmt.Errorf("failed to get create metadata: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(metadata, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output - fields are returned as an array, not a map
+		fieldsArray, _ := metadata["fields"].([]interface{})
+		if len(fieldsArray) == 0 {
+			fmt.Printf("No fields found for project %s issue type %s\n", projectKey, issueTypeID)
+			return nil
+		}
+
+		fmt.Printf("Create metadata for project %s, issue type %s:\n\n", projectKey, issueTypeID)
+
+		// Separate required and optional fields
+		var requiredFields []interface{}
+		var optionalFields []interface{}
+
+		for _, fieldVal := range fieldsArray {
+			fieldMap, _ := fieldVal.(map[string]interface{})
+			required, _ := fieldMap["required"].(bool)
+			if required {
+				requiredFields = append(requiredFields, fieldVal)
+			} else {
+				optionalFields = append(optionalFields, fieldVal)
+			}
+		}
+
+		// Display required fields first
+		if len(requiredFields) > 0 {
+			fmt.Println("Required Fields:")
+			for _, fieldVal := range requiredFields {
+				fieldMap, _ := fieldVal.(map[string]interface{})
+				key, _ := fieldMap["key"].(string)
+				printFieldInfo(fieldVal, key)
+			}
+		}
+
+		// Display optional fields
+		if len(optionalFields) > 0 {
+			fmt.Println("\nOptional Fields:")
+			for _, fieldVal := range optionalFields {
+				fieldMap, _ := fieldVal.(map[string]interface{})
+				key, _ := fieldMap["key"].(string)
+				printFieldInfo(fieldVal, key)
+			}
+		}
+	}
+
+	return nil
+}
+
+func printFieldInfo(val interface{}, key string) {
+	fieldMap, _ := val.(map[string]interface{})
+	name, _ := fieldMap["name"].(string)
+	schema, _ := fieldMap["schema"].(map[string]interface{})
+	fieldType, _ := schema["type"].(string)
+
+	fmt.Printf("\n  %s (%s)\n", name, key)
+	fmt.Printf("    Type: %s\n", fieldType)
+
+	// Show allowed values if present
+	allowedValues, _ := fieldMap["allowedValues"].([]interface{})
+	if len(allowedValues) > 0 {
+		fmt.Printf("    Allowed values:\n")
+		for _, av := range allowedValues {
+			avMap, _ := av.(map[string]interface{})
+			value, _ := avMap["value"].(string)
+			id, _ := avMap["id"].(string)
+			if value != "" {
+				fmt.Printf("      - %s (id: %s)\n", value, id)
+			} else {
+				// For some fields like issue types
+				valueName, _ := avMap["name"].(string)
+				if valueName != "" {
+					fmt.Printf("      - %s (id: %s)\n", valueName, id)
+				}
+			}
+		}
+	}
+}
+
+func runJiraGetFieldOptions(cmd *cobra.Command, args []string) error {
+	fieldKey := args[0]
+
+	// Validate required flags
+	if jiraFieldOptionsProject == "" {
+		return fmt.Errorf("--project flag is required")
+	}
+	if jiraFieldOptionsIssueTypeID == "" {
+		return fmt.Errorf("--issue-type-id flag is required")
+	}
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get field options
+	options, err := client.GetFieldOptions(fieldKey, jiraFieldOptionsProject, jiraFieldOptionsIssueTypeID)
+	if err != nil {
+		return fmt.Errorf("failed to get field options: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(options, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		// Pretty output
+		fieldName, _ := options["name"].(string)
+		allowedValues, _ := options["allowedValues"].([]interface{})
+
+		if fieldName == "" {
+			fieldName = fieldKey
+		}
+
+		fmt.Printf("Field: %s (%s)\n\n", fieldName, fieldKey)
+
+		if len(allowedValues) == 0 {
+			fmt.Println("No allowed values found for this field")
+			return nil
+		}
+
+		fmt.Println("Allowed values:")
+		for i, av := range allowedValues {
+			avMap, _ := av.(map[string]interface{})
+			value, _ := avMap["value"].(string)
+			id, _ := avMap["id"].(string)
+
+			fmt.Printf("%d. %s\n", i+1, value)
+			fmt.Printf("   ID: %s\n", id)
+
+			// Show how to use in --fields
+			if i == 0 {
+				fmt.Printf("   Usage: --fields '{\"customfield_XXXXX\": {\"id\": \"%s\"}}'\n", id)
+			}
 			fmt.Println()
 		}
 	}

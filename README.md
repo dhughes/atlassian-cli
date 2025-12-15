@@ -2,6 +2,18 @@
 
 A command-line interface for interacting with Atlassian Jira and Confluence APIs.
 
+## Why This Tool?
+
+The `atl` CLI was created to address practical challenges encountered with the official Atlassian MCP server, particularly frequent reauthentication requirements that disrupted workflows. Inspired by GitHub's `gh` CLI—which proved more reliable and useful than the GitHub MCP server—this project explores a similar approach for Atlassian products.
+
+**Key Goals:**
+- **Reliability**: Persistent authentication using API tokens (no OAuth token expiration)
+- **Dual-purpose**: Designed for both human use and AI/automation integration
+- **Simplicity**: Straightforward commands following familiar CLI patterns
+- **Extensibility**: Easy to integrate into scripts and automated workflows
+
+The result is a tool that provides feature parity with the Atlassian MCP server while being more reliable, supporting long-lived API tokens (not OAuth), and equally effective for both manual and automated use cases.
+
 ## Installation
 
 ### Prerequisites
@@ -63,6 +75,68 @@ Shows:
 ```
 
 Removes stored credentials for the active account.
+
+## Quick Start
+
+### Jira Examples
+
+```bash
+# Get issue details
+./atl jira get-issue ABC-123
+
+# Search issues
+./atl jira search-jql "project = ABC AND status = 'In Progress'"
+
+# Create an issue
+./atl jira create-issue \
+  --project ABC \
+  --type Task \
+  --summary "Implement new feature" \
+  --description "## Details\n- First step\n- Second step"
+
+# Discover required fields for creating issues
+./atl jira get-create-meta ABC 10002
+./atl jira get-field-options customfield_10369 --project ABC --issue-type-id 10002
+
+# Create issue with custom fields
+./atl jira create-issue \
+  --project ABC \
+  --type Task \
+  --summary "New ticket" \
+  --fields '{"customfield_10369": {"id": "10690"}}'
+
+# Transition issue to new status
+./atl jira get-transitions ABC-123
+./atl jira transition-issue ABC-123 31
+```
+
+### Confluence Examples
+
+```bash
+# Get page content
+./atl confluence get-page 123456789
+
+# List pages in a space
+./atl confluence get-pages-in-space TEAM
+
+# Create a page
+./atl confluence create-page \
+  --space TEAM \
+  --title "New Documentation" \
+  --body "<p>Page content here</p>"
+
+# Update existing page
+./atl confluence update-page 123456789 \
+  --title "Updated Title" \
+  --body "<p>Updated content</p>" \
+  --version 2
+
+# Search Confluence
+./atl confluence search-cql "title ~ 'API' AND space = TEAM"
+
+# Add a comment
+./atl confluence add-comment 123456789 "Great documentation!"
+```
 
 ## Configuration
 
@@ -138,28 +212,38 @@ This CLI does not support unified Rovo search like the Atlassian MCP server. Rov
 
 See [SEARCH.md](SEARCH.md) for detailed examples and guidance.
 
-## Future Development
+## Feature Status
 
-### Phase 2: Essential Jira Commands (Coming Soon)
-- `atl jira get-issue`
-- `atl jira create-issue`
-- `atl jira edit-issue`
-- `atl jira search-jql`
-- And more...
+### ✅ Completed Features
 
-### Phase 3: Essential Confluence Commands
-- `atl confluence get-page`
-- `atl confluence get-pages-in-space`
-- `atl confluence create-page`
-- `atl confluence update-page`
-- And more...
+**Core Infrastructure:**
+- Authentication with API tokens (persistent, no expiration)
+- Configuration management (`~/.config/atlassian/config.json`)
+- Multiple account support with account switching
+- JSON output for all commands (via `--json` flag)
+- Secure credential storage (0600 file permissions)
 
-### Phase 4: Complete MCP Coverage
-- All remaining Jira operations
-- All remaining Confluence operations
-- Meta commands (search, fetch by ARI)
-- Multiple account support
-- Shell completion
+**Jira Commands:**
+- Issue operations: `get-issue`, `create-issue`, `edit-issue`
+- Search: `search-jql`
+- Comments: `add-comment`
+- Workflow: `get-transitions`, `transition-issue`
+- Project info: `get-projects`, `get-project-issue-types`
+- Field discovery: `get-create-meta`, `get-field-options`
+- User lookup: `lookup-account-id`
+- Remote links: `get-remote-links`
+
+**Confluence Commands:**
+- Page operations: `get-page`, `create-page`, `update-page`
+- Space navigation: `get-pages-in-space`, `get-spaces`
+- Page hierarchy: `get-page-ancestors`, `get-page-descendants`
+- Comments: `get-page-comments`, `add-comment`, `create-inline-comment`
+- Search: `search-cql`
+
+**Content Formatting:**
+- Markdown-to-ADF conversion for Jira descriptions
+- HTML rendering for Confluence pages (readable terminal output)
+- Pretty-printed output by default
 
 ## Development
 
