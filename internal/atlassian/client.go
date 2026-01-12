@@ -1518,3 +1518,64 @@ func (c *Client) LinkIssues(opts *LinkIssueOptions) error {
 
 	return nil
 }
+
+// IssueLink represents a link between two issues
+type IssueLink struct {
+	ID           string                 `json:"id"`
+	Type         IssueLinkType          `json:"type"`
+	InwardIssue  *LinkedIssue           `json:"inwardIssue,omitempty"`
+	OutwardIssue *LinkedIssue           `json:"outwardIssue,omitempty"`
+}
+
+// LinkedIssue represents a linked issue in a link
+type LinkedIssue struct {
+	ID     string                 `json:"id"`
+	Key    string                 `json:"key"`
+	Self   string                 `json:"self"`
+	Fields map[string]interface{} `json:"fields"`
+}
+
+// GetIssueLinks retrieves all issue links for a given issue
+func (c *Client) GetIssueLinks(issueKey string) ([]IssueLink, error) {
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s?fields=issuelinks", c.BaseURL, issueKey)
+
+	resp, err := c.doRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get issue (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Fields struct {
+			IssueLinks []IssueLink `json:"issuelinks"`
+		} `json:"fields"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Fields.IssueLinks, nil
+}
+
+// DeleteIssueLink deletes an issue link by its ID
+func (c *Client) DeleteIssueLink(linkID string) error {
+	url := fmt.Sprintf("%s/rest/api/3/issueLink/%s", c.BaseURL, linkID)
+
+	resp, err := c.doRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete issue link (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}

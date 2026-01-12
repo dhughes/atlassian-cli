@@ -238,6 +238,28 @@ Use 'atl jira get-link-types' to see all available link types and their directio
 	RunE: runJiraLinkIssue,
 }
 
+var jiraUnlinkIssueCmd = &cobra.Command{
+	Use:   "unlink-issue <issue-key>",
+	Short: "Remove link(s) from an issue",
+	Long: `Remove issue link(s) from a Jira issue.
+
+Without --linked-issue flag, displays all links for the issue.
+With --linked-issue flag, removes the link(s) between the two issues.
+Optionally specify --type to only remove links of a specific type.
+
+Examples:
+  atl jira unlink-issue FX-123
+    Lists all links for FX-123
+
+  atl jira unlink-issue FX-123 --linked-issue FX-456
+    Removes all links between FX-123 and FX-456
+
+  atl jira unlink-issue FX-123 --linked-issue FX-456 --type blocks
+    Removes only "blocks" links between FX-123 and FX-456`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraUnlinkIssue,
+}
+
 var (
 	// Flags for get-issue
 	jiraGetIssueFields         []string
@@ -304,6 +326,10 @@ var (
 	// Flags for link-issue
 	jiraLinkType    string
 	jiraLinkComment string
+
+	// Flags for unlink-issue
+	jiraUnlinkLinkedIssue string
+	jiraUnlinkType        string
 )
 
 func init() {
@@ -323,6 +349,7 @@ func init() {
 	jiraCmd.AddCommand(jiraGetFieldOptionsCmd)
 	jiraCmd.AddCommand(jiraGetLinkTypesCmd)
 	jiraCmd.AddCommand(jiraLinkIssueCmd)
+	jiraCmd.AddCommand(jiraUnlinkIssueCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -412,6 +439,11 @@ func init() {
 	jiraLinkIssueCmd.Flags().StringVar(&jiraLinkType, "type", "", "Link type relationship (e.g., 'blocks', 'is blocked by', 'duplicates') (required)")
 	jiraLinkIssueCmd.Flags().StringVar(&jiraLinkComment, "comment", "", "Optional comment to add with the link")
 	jiraLinkIssueCmd.MarkFlagRequired("type")
+
+	// Flags for unlink-issue
+	jiraUnlinkIssueCmd.Flags().StringVar(&jiraUnlinkLinkedIssue, "linked-issue", "", "The issue key to unlink from (if not specified, lists all links)")
+	jiraUnlinkIssueCmd.Flags().StringVar(&jiraUnlinkType, "type", "", "Only remove links of this type (e.g., 'blocks', 'Blocks')")
+	jiraUnlinkIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -1586,6 +1618,139 @@ func runJiraLinkIssue(cmd *cobra.Command, args []string) error {
 	if jiraLinkComment != "" {
 		fmt.Printf("  Comment: %s\n", jiraLinkComment)
 	}
+
+	return nil
+}
+
+func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get all links for the issue
+	links, err := client.GetIssueLinks(issueKey)
+	if err != nil {
+		return fmt.Errorf("failed to get issue links: %w", err)
+	}
+
+	if len(links) == 0 {
+		fmt.Printf("No links found for %s\n", issueKey)
+		return nil
+	}
+
+	// If no linked-issue specified, just list the links
+	if jiraUnlinkLinkedIssue == "" {
+		if outputJSON {
+			output, err := json.MarshalIndent(links, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to format output: %w", err)
+			}
+			fmt.Println(string(output))
+		} else {
+			fmt.Printf("Found %d link(s) for %s:\n\n", len(links), issueKey)
+
+			for i, link := range links {
+				// Determine which issue is the "other" one
+				var otherIssue *atlassian.LinkedIssue
+				var direction string
+
+				if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
+					otherIssue = link.OutwardIssue
+					direction = link.Type.Outward
+				} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
+					otherIssue = link.InwardIssue
+					direction = link.Type.Inward
+				}
+
+				if otherIssue != nil {
+					fmt.Printf("%d. %s %s %s (Link ID: %s)\n", i+1, issueKey, direction, otherIssue.Key, link.ID)
+					fmt.Printf("   Type: %s\n", link.Type.Name)
+					fmt.Println()
+				}
+			}
+
+			fmt.Println("Use --linked-issue flag to remove specific link(s)")
+		}
+		return nil
+	}
+
+	// Filter links to find those matching the criteria
+	var linksToDelete []atlassian.IssueLink
+
+	for _, link := range links {
+		// Check if this link connects to the specified linked issue
+		matchesIssue := false
+		if link.OutwardIssue != nil && link.OutwardIssue.Key == jiraUnlinkLinkedIssue {
+			matchesIssue = true
+		}
+		if link.InwardIssue != nil && link.InwardIssue.Key == jiraUnlinkLinkedIssue {
+			matchesIssue = true
+		}
+
+		if !matchesIssue {
+			continue
+		}
+
+		// If type filter is specified, check if it matches
+		if jiraUnlinkType != "" {
+			typeLower := strings.ToLower(strings.TrimSpace(jiraUnlinkType))
+			linkTypeLower := strings.ToLower(link.Type.Name)
+			linkOutwardLower := strings.ToLower(link.Type.Outward)
+			linkInwardLower := strings.ToLower(link.Type.Inward)
+
+			if typeLower != linkTypeLower && typeLower != linkOutwardLower && typeLower != linkInwardLower {
+				continue
+			}
+		}
+
+		linksToDelete = append(linksToDelete, link)
+	}
+
+	if len(linksToDelete) == 0 {
+		fmt.Printf("No matching links found between %s and %s", issueKey, jiraUnlinkLinkedIssue)
+		if jiraUnlinkType != "" {
+			fmt.Printf(" with type '%s'", jiraUnlinkType)
+		}
+		fmt.Println()
+		return nil
+	}
+
+	// Delete the links
+	for _, link := range linksToDelete {
+		if err := client.DeleteIssueLink(link.ID); err != nil {
+			return fmt.Errorf("failed to delete link %s: %w", link.ID, err)
+		}
+
+		// Determine direction for output
+		var otherIssue *atlassian.LinkedIssue
+		var direction string
+
+		if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
+			otherIssue = link.OutwardIssue
+			direction = link.Type.Outward
+		} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
+			otherIssue = link.InwardIssue
+			direction = link.Type.Inward
+		}
+
+		if otherIssue != nil {
+			fmt.Printf("✓ Removed link: %s %s %s\n", issueKey, direction, otherIssue.Key)
+		}
+	}
+
+	fmt.Printf("\nRemoved %d link(s)\n", len(linksToDelete))
 
 	return nil
 }
