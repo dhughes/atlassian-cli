@@ -199,6 +199,45 @@ Examples:
 	RunE: runJiraGetFieldOptions,
 }
 
+var jiraGetLinkTypesCmd = &cobra.Command{
+	Use:   "get-link-types",
+	Short: "Get all issue link types",
+	Long: `Get all available issue link types in Jira.
+
+Link types define the relationships between issues (e.g., blocks, duplicates, relates to).
+
+Examples:
+  atl jira get-link-types
+  atl jira get-link-types --json`,
+	RunE: runJiraGetLinkTypes,
+}
+
+var jiraLinkIssueCmd = &cobra.Command{
+	Use:   "link-issue <from-key> <to-key>",
+	Short: "Link two issues together",
+	Long: `Create a link between two issues with a specified relationship type.
+
+The --type flag specifies the relationship and can be provided as either the
+outward or inward description (e.g., "blocks" or "is blocked by").
+
+The command will automatically determine which issue should be inward/outward
+based on the relationship direction specified.
+
+Examples:
+  atl jira link-issue FX-123 FX-456 --type blocks
+    Creates: FX-123 blocks FX-456 (FX-456 is blocked by FX-123)
+
+  atl jira link-issue FX-456 FX-123 --type "is blocked by"
+    Creates: FX-456 is blocked by FX-123 (FX-123 blocks FX-456)
+
+  atl jira link-issue FX-123 FX-456 --type duplicates --comment "Same issue"
+    Creates link with a comment
+
+Use 'atl jira get-link-types' to see all available link types and their directions.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runJiraLinkIssue,
+}
+
 var (
 	// Flags for get-issue
 	jiraGetIssueFields         []string
@@ -261,6 +300,10 @@ var (
 	// Flags for get-field-options
 	jiraFieldOptionsProject     string
 	jiraFieldOptionsIssueTypeID string
+
+	// Flags for link-issue
+	jiraLinkType    string
+	jiraLinkComment string
 )
 
 func init() {
@@ -278,6 +321,8 @@ func init() {
 	jiraCmd.AddCommand(jiraGetRemoteLinksCmd)
 	jiraCmd.AddCommand(jiraGetCreateMetaCmd)
 	jiraCmd.AddCommand(jiraGetFieldOptionsCmd)
+	jiraCmd.AddCommand(jiraGetLinkTypesCmd)
+	jiraCmd.AddCommand(jiraLinkIssueCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -359,6 +404,14 @@ func init() {
 	jiraGetFieldOptionsCmd.Flags().StringVar(&jiraFieldOptionsProject, "project", "", "Project key for context (required)")
 	jiraGetFieldOptionsCmd.Flags().StringVar(&jiraFieldOptionsIssueTypeID, "issue-type-id", "", "Issue type ID for context (required)")
 	jiraGetFieldOptionsCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for get-link-types
+	jiraGetLinkTypesCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+
+	// Flags for link-issue
+	jiraLinkIssueCmd.Flags().StringVar(&jiraLinkType, "type", "", "Link type relationship (e.g., 'blocks', 'is blocked by', 'duplicates') (required)")
+	jiraLinkIssueCmd.Flags().StringVar(&jiraLinkComment, "comment", "", "Optional comment to add with the link")
+	jiraLinkIssueCmd.MarkFlagRequired("type")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -1392,6 +1445,146 @@ func runJiraGetFieldOptions(cmd *cobra.Command, args []string) error {
 			}
 			fmt.Println()
 		}
+	}
+
+	return nil
+}
+
+func runJiraGetLinkTypes(cmd *cobra.Command, args []string) error {
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get link types
+	linkTypes, err := client.GetIssueLinkTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get link types: %w", err)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(linkTypes, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		if len(linkTypes) == 0 {
+			fmt.Println("No link types found.")
+			return nil
+		}
+
+		fmt.Printf("Found %d link type(s):\n\n", len(linkTypes))
+
+		for i, lt := range linkTypes {
+			fmt.Printf("%d. %s (ID: %s)\n", i+1, lt.Name, lt.ID)
+			fmt.Printf("   Outward: %s\n", lt.Outward)
+			fmt.Printf("   Inward: %s\n", lt.Inward)
+			fmt.Println()
+		}
+
+		fmt.Println("Use these names with the --type flag in 'atl jira link-issue'")
+	}
+
+	return nil
+}
+
+func runJiraLinkIssue(cmd *cobra.Command, args []string) error {
+	fromKey := args[0]
+	toKey := args[1]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get all link types to resolve the type
+	linkTypes, err := client.GetIssueLinkTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get link types: %w", err)
+	}
+
+	// Find matching link type based on the provided type string
+	var matchedType *atlassian.IssueLinkType
+	var isOutward bool
+
+	typeLower := strings.ToLower(strings.TrimSpace(jiraLinkType))
+
+	for i := range linkTypes {
+		lt := &linkTypes[i]
+		if strings.ToLower(lt.Outward) == typeLower {
+			matchedType = lt
+			isOutward = true
+			break
+		}
+		if strings.ToLower(lt.Inward) == typeLower {
+			matchedType = lt
+			isOutward = false
+			break
+		}
+		// Also try matching the name directly
+		if strings.ToLower(lt.Name) == typeLower {
+			matchedType = lt
+			isOutward = true // Default to outward if name is matched
+			break
+		}
+	}
+
+	if matchedType == nil {
+		return fmt.Errorf("link type '%s' not found. Use 'atl jira get-link-types' to see available types", jiraLinkType)
+	}
+
+	// Determine inward and outward issues based on the direction
+	var inwardIssue, outwardIssue string
+	if isOutward {
+		// User specified outward relationship: from -> to
+		outwardIssue = fromKey
+		inwardIssue = toKey
+	} else {
+		// User specified inward relationship: from <- to (swap them)
+		outwardIssue = toKey
+		inwardIssue = fromKey
+	}
+
+	// Create the link
+	opts := &atlassian.LinkIssueOptions{
+		TypeName:     matchedType.Name,
+		InwardIssue:  inwardIssue,
+		OutwardIssue: outwardIssue,
+		CommentBody:  jiraLinkComment,
+	}
+
+	if err := client.LinkIssues(opts); err != nil {
+		return fmt.Errorf("failed to link issues: %w", err)
+	}
+
+	// Pretty output to confirm what was created
+	if isOutward {
+		fmt.Printf("✓ Linked: %s %s %s\n", fromKey, matchedType.Outward, toKey)
+	} else {
+		fmt.Printf("✓ Linked: %s %s %s\n", fromKey, matchedType.Inward, toKey)
+	}
+
+	if jiraLinkComment != "" {
+		fmt.Printf("  Comment: %s\n", jiraLinkComment)
 	}
 
 	return nil

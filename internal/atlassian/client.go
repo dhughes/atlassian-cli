@@ -1,6 +1,7 @@
 package atlassian
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -1423,4 +1424,97 @@ func (c *Client) GetFieldOptions(fieldKey string, projectKey string, issueTypeID
 	}
 
 	return nil, fmt.Errorf("field %s not found in project %s", fieldKey, projectKey)
+}
+
+// IssueLinkType represents an issue link type
+type IssueLinkType struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Inward  string `json:"inward"`
+	Outward string `json:"outward"`
+	Self    string `json:"self"`
+}
+
+// GetIssueLinkTypes retrieves all issue link types
+func (c *Client) GetIssueLinkTypes() ([]IssueLinkType, error) {
+	url := fmt.Sprintf("%s/rest/api/3/issueLinkType", c.BaseURL)
+
+	resp, err := c.doRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get issue link types (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		IssueLinkTypes []IssueLinkType `json:"issueLinkTypes"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.IssueLinkTypes, nil
+}
+
+// LinkIssueOptions contains options for linking issues
+type LinkIssueOptions struct {
+	TypeName      string
+	InwardIssue   string
+	OutwardIssue  string
+	CommentBody   string
+}
+
+// LinkIssues creates a link between two issues
+func (c *Client) LinkIssues(opts *LinkIssueOptions) error {
+	if opts.TypeName == "" {
+		return fmt.Errorf("type name is required")
+	}
+	if opts.InwardIssue == "" {
+		return fmt.Errorf("inward issue is required")
+	}
+	if opts.OutwardIssue == "" {
+		return fmt.Errorf("outward issue is required")
+	}
+
+	url := fmt.Sprintf("%s/rest/api/3/issueLink", c.BaseURL)
+
+	body := map[string]any{
+		"type": map[string]any{
+			"name": opts.TypeName,
+		},
+		"inwardIssue": map[string]any{
+			"key": opts.InwardIssue,
+		},
+		"outwardIssue": map[string]any{
+			"key": opts.OutwardIssue,
+		},
+	}
+
+	if opts.CommentBody != "" {
+		body["comment"] = map[string]any{
+			"body": opts.CommentBody,
+		}
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to link issues (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }
