@@ -212,52 +212,61 @@ Examples:
 	RunE: runJiraGetLinkTypes,
 }
 
-var jiraLinkIssueCmd = &cobra.Command{
-	Use:   "link-issue <from-key> <to-key>",
-	Short: "Link two issues together",
-	Long: `Create a link between two issues with a specified relationship type.
+var jiraGetIssueLinksCmd = &cobra.Command{
+	Use:   "get-issue-links <issue-key>",
+	Short: "List all links for an issue",
+	Long: `List all issue links for a Jira issue.
 
-The --type flag specifies the relationship and can be provided as either the
-outward or inward description (e.g., "blocks" or "is blocked by").
-
-The command will automatically determine which issue should be inward/outward
-based on the relationship direction specified.
+Shows what issues this issue is linked to and the type of relationship.
 
 Examples:
-  atl jira link-issue FX-123 FX-456 --type blocks
-    Creates: FX-123 blocks FX-456 (FX-456 is blocked by FX-123)
+  atl jira get-issue-links FX-123
+  atl jira get-issue-links FX-123 --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraGetIssueLinks,
+}
 
-  atl jira link-issue FX-456 FX-123 --type "is blocked by"
-    Creates: FX-456 is blocked by FX-123 (FX-123 blocks FX-456)
+var jiraCreateIssueLinkCmd = &cobra.Command{
+	Use:   "create-issue-link <issue-key>",
+	Short: "Create a link between two issues",
+	Long: `Create a link between two issues with a specified relationship type.
 
-  atl jira link-issue FX-123 FX-456 --type duplicates --comment "Same issue"
+The first argument is the issue you're adding the link TO.
+The --linked-issue flag specifies the OTHER issue in the relationship.
+The --type flag describes the relationship FROM the first issue's perspective.
+
+Examples:
+  atl jira create-issue-link FX-123 --linked-issue FX-456 --type "is blocked by"
+    Result: FX-123 is blocked by FX-456 (FX-456 blocks FX-123)
+
+  atl jira create-issue-link FX-123 --linked-issue FX-456 --type blocks
+    Result: FX-123 blocks FX-456 (FX-456 is blocked by FX-123)
+
+  atl jira create-issue-link FX-123 --linked-issue FX-456 --type duplicates --comment "Same issue"
     Creates link with a comment
 
 Use 'atl jira get-link-types' to see all available link types and their directions.`,
-	Args: cobra.ExactArgs(2),
-	RunE: runJiraLinkIssue,
+	Args: cobra.ExactArgs(1),
+	RunE: runJiraCreateIssueLink,
 }
 
-var jiraUnlinkIssueCmd = &cobra.Command{
-	Use:   "unlink-issue <issue-key>",
-	Short: "Remove link(s) from an issue",
-	Long: `Remove issue link(s) from a Jira issue.
+var jiraRemoveIssueLinkCmd = &cobra.Command{
+	Use:   "remove-issue-link <issue-key>",
+	Short: "Remove link(s) between two issues",
+	Long: `Remove issue link(s) between two Jira issues.
 
-Without --linked-issue flag, displays all links for the issue.
-With --linked-issue flag, removes the link(s) between the two issues.
+Removes the link(s) between the specified issue and the --linked-issue.
 Optionally specify --type to only remove links of a specific type.
+If multiple links exist between the issues, all matching links are removed.
 
 Examples:
-  atl jira unlink-issue FX-123
-    Lists all links for FX-123
-
-  atl jira unlink-issue FX-123 --linked-issue FX-456
+  atl jira remove-issue-link FX-123 --linked-issue FX-456
     Removes all links between FX-123 and FX-456
 
-  atl jira unlink-issue FX-123 --linked-issue FX-456 --type blocks
+  atl jira remove-issue-link FX-123 --linked-issue FX-456 --type blocks
     Removes only "blocks" links between FX-123 and FX-456`,
 	Args: cobra.ExactArgs(1),
-	RunE: runJiraUnlinkIssue,
+	RunE: runJiraRemoveIssueLink,
 }
 
 var (
@@ -323,13 +332,14 @@ var (
 	jiraFieldOptionsProject     string
 	jiraFieldOptionsIssueTypeID string
 
-	// Flags for link-issue
-	jiraLinkType    string
-	jiraLinkComment string
+	// Flags for create-issue-link
+	jiraCreateLinkIssue   string
+	jiraCreateLinkType    string
+	jiraCreateLinkComment string
 
-	// Flags for unlink-issue
-	jiraUnlinkLinkedIssue string
-	jiraUnlinkType        string
+	// Flags for remove-issue-link
+	jiraRemoveLinkIssue string
+	jiraRemoveLinkType  string
 )
 
 func init() {
@@ -348,8 +358,9 @@ func init() {
 	jiraCmd.AddCommand(jiraGetCreateMetaCmd)
 	jiraCmd.AddCommand(jiraGetFieldOptionsCmd)
 	jiraCmd.AddCommand(jiraGetLinkTypesCmd)
-	jiraCmd.AddCommand(jiraLinkIssueCmd)
-	jiraCmd.AddCommand(jiraUnlinkIssueCmd)
+	jiraCmd.AddCommand(jiraGetIssueLinksCmd)
+	jiraCmd.AddCommand(jiraCreateIssueLinkCmd)
+	jiraCmd.AddCommand(jiraRemoveIssueLinkCmd)
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -435,15 +446,20 @@ func init() {
 	// Flags for get-link-types
 	jiraGetLinkTypesCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
-	// Flags for link-issue
-	jiraLinkIssueCmd.Flags().StringVar(&jiraLinkType, "type", "", "Link type relationship (e.g., 'blocks', 'is blocked by', 'duplicates') (required)")
-	jiraLinkIssueCmd.Flags().StringVar(&jiraLinkComment, "comment", "", "Optional comment to add with the link")
-	jiraLinkIssueCmd.MarkFlagRequired("type")
+	// Flags for get-issue-links
+	jiraGetIssueLinksCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
-	// Flags for unlink-issue
-	jiraUnlinkIssueCmd.Flags().StringVar(&jiraUnlinkLinkedIssue, "linked-issue", "", "The issue key to unlink from (if not specified, lists all links)")
-	jiraUnlinkIssueCmd.Flags().StringVar(&jiraUnlinkType, "type", "", "Only remove links of this type (e.g., 'blocks', 'Blocks')")
-	jiraUnlinkIssueCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
+	// Flags for create-issue-link
+	jiraCreateIssueLinkCmd.Flags().StringVar(&jiraCreateLinkIssue, "linked-issue", "", "The other issue in the relationship (required)")
+	jiraCreateIssueLinkCmd.Flags().StringVar(&jiraCreateLinkType, "type", "", "Link type from the first issue's perspective (e.g., 'blocks', 'is blocked by') (required)")
+	jiraCreateIssueLinkCmd.Flags().StringVar(&jiraCreateLinkComment, "comment", "", "Optional comment to add with the link")
+	jiraCreateIssueLinkCmd.MarkFlagRequired("linked-issue")
+	jiraCreateIssueLinkCmd.MarkFlagRequired("type")
+
+	// Flags for remove-issue-link
+	jiraRemoveIssueLinkCmd.Flags().StringVar(&jiraRemoveLinkIssue, "linked-issue", "", "The other issue to unlink from (required)")
+	jiraRemoveIssueLinkCmd.Flags().StringVar(&jiraRemoveLinkType, "type", "", "Only remove links of this type (e.g., 'blocks')")
+	jiraRemoveIssueLinkCmd.MarkFlagRequired("linked-issue")
 }
 
 func runJiraGetIssue(cmd *cobra.Command, args []string) error {
@@ -1530,99 +1546,7 @@ func runJiraGetLinkTypes(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runJiraLinkIssue(cmd *cobra.Command, args []string) error {
-	fromKey := args[0]
-	toKey := args[1]
-
-	// Load config and get active account
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	account, err := cfg.GetActiveAccount()
-	if err != nil {
-		return fmt.Errorf("not logged in. Run 'atl auth login' first")
-	}
-
-	// Create client
-	client := atlassian.NewClient(account.Email, account.Token, account.Site)
-
-	// Get all link types to resolve the type
-	linkTypes, err := client.GetIssueLinkTypes()
-	if err != nil {
-		return fmt.Errorf("failed to get link types: %w", err)
-	}
-
-	// Find matching link type based on the provided type string
-	var matchedType *atlassian.IssueLinkType
-	var isOutward bool
-
-	typeLower := strings.ToLower(strings.TrimSpace(jiraLinkType))
-
-	for i := range linkTypes {
-		lt := &linkTypes[i]
-		if strings.ToLower(lt.Outward) == typeLower {
-			matchedType = lt
-			isOutward = true
-			break
-		}
-		if strings.ToLower(lt.Inward) == typeLower {
-			matchedType = lt
-			isOutward = false
-			break
-		}
-		// Also try matching the name directly
-		if strings.ToLower(lt.Name) == typeLower {
-			matchedType = lt
-			isOutward = true // Default to outward if name is matched
-			break
-		}
-	}
-
-	if matchedType == nil {
-		return fmt.Errorf("link type '%s' not found. Use 'atl jira get-link-types' to see available types", jiraLinkType)
-	}
-
-	// Determine inward and outward issues based on the direction
-	var inwardIssue, outwardIssue string
-	if isOutward {
-		// User specified outward relationship: from -> to
-		outwardIssue = fromKey
-		inwardIssue = toKey
-	} else {
-		// User specified inward relationship: from <- to (swap them)
-		outwardIssue = toKey
-		inwardIssue = fromKey
-	}
-
-	// Create the link
-	opts := &atlassian.LinkIssueOptions{
-		TypeName:     matchedType.Name,
-		InwardIssue:  inwardIssue,
-		OutwardIssue: outwardIssue,
-		CommentBody:  jiraLinkComment,
-	}
-
-	if err := client.LinkIssues(opts); err != nil {
-		return fmt.Errorf("failed to link issues: %w", err)
-	}
-
-	// Pretty output to confirm what was created
-	if isOutward {
-		fmt.Printf("✓ Linked: %s %s %s\n", fromKey, matchedType.Outward, toKey)
-	} else {
-		fmt.Printf("✓ Linked: %s %s %s\n", fromKey, matchedType.Inward, toKey)
-	}
-
-	if jiraLinkComment != "" {
-		fmt.Printf("  Comment: %s\n", jiraLinkComment)
-	}
-
-	return nil
-}
-
-func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
+func runJiraGetIssueLinks(cmd *cobra.Command, args []string) error {
 	issueKey := args[0]
 
 	// Load config and get active account
@@ -1650,41 +1574,170 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// If no linked-issue specified, just list the links
-	if jiraUnlinkLinkedIssue == "" {
-		if outputJSON {
-			output, err := json.MarshalIndent(links, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to format output: %w", err)
-			}
-			fmt.Println(string(output))
-		} else {
-			fmt.Printf("Found %d link(s) for %s:\n\n", len(links), issueKey)
-
-			for i, link := range links {
-				// Determine which issue is the "other" one
-				var otherIssue *atlassian.LinkedIssue
-				var direction string
-
-				if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
-					// The queried issue is the inward issue
-					otherIssue = link.OutwardIssue
-					direction = link.Type.Inward
-				} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
-					// The queried issue is the outward issue
-					otherIssue = link.InwardIssue
-					direction = link.Type.Outward
-				}
-
-				if otherIssue != nil {
-					fmt.Printf("%d. %s %s %s (Link ID: %s)\n", i+1, issueKey, direction, otherIssue.Key, link.ID)
-					fmt.Printf("   Type: %s\n", link.Type.Name)
-					fmt.Println()
-				}
-			}
-
-			fmt.Println("Use --linked-issue flag to remove specific link(s)")
+	if outputJSON {
+		output, err := json.MarshalIndent(links, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
 		}
+		fmt.Println(string(output))
+	} else {
+		fmt.Printf("Found %d link(s) for %s:\n\n", len(links), issueKey)
+
+		for i, link := range links {
+			// Determine which issue is the "other" one
+			var otherIssue *atlassian.LinkedIssue
+			var direction string
+
+			if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
+				// The other issue is outwardIssue, so THIS issue performs the OUTWARD action
+				otherIssue = link.OutwardIssue
+				direction = link.Type.Outward
+			} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
+				// The other issue is inwardIssue, so THIS issue performs the INWARD action
+				otherIssue = link.InwardIssue
+				direction = link.Type.Inward
+			}
+
+			if otherIssue != nil {
+				fmt.Printf("%d. %s %s %s (Link ID: %s)\n", i+1, issueKey, direction, otherIssue.Key, link.ID)
+				fmt.Printf("   Type: %s\n", link.Type.Name)
+				fmt.Println()
+			}
+		}
+	}
+
+	return nil
+}
+
+func runJiraCreateIssueLink(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+	linkedIssue := jiraCreateLinkIssue
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get all link types to resolve the type
+	linkTypes, err := client.GetIssueLinkTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get link types: %w", err)
+	}
+
+	// Find matching link type based on the provided type string
+	var matchedType *atlassian.IssueLinkType
+	var isOutward bool
+
+	typeLower := strings.ToLower(strings.TrimSpace(jiraCreateLinkType))
+
+	for i := range linkTypes {
+		lt := &linkTypes[i]
+		if strings.ToLower(lt.Outward) == typeLower {
+			matchedType = lt
+			isOutward = true
+			break
+		}
+		if strings.ToLower(lt.Inward) == typeLower {
+			matchedType = lt
+			isOutward = false
+			break
+		}
+		// Also try matching the name directly
+		if strings.ToLower(lt.Name) == typeLower {
+			matchedType = lt
+			isOutward = true // Default to outward if name is matched
+			break
+		}
+	}
+
+	if matchedType == nil {
+		return fmt.Errorf("link type '%s' not found. Use 'atl jira get-link-types' to see available types", jiraCreateLinkType)
+	}
+
+	// Determine inward and outward issues based on the direction
+	// The type describes the relationship FROM the first issue's perspective
+	//
+	// Jira's terminology (counterintuitive!):
+	// - When viewing issue X, if the OTHER issue is the "outwardIssue", then X performs the OUTWARD action
+	// - When viewing issue X, if the OTHER issue is the "inwardIssue", then X performs the INWARD action
+	var inwardIssue, outwardIssue string
+	if isOutward {
+		// User said: "issueKey <outward-action> linkedIssue"
+		// Example: "FX-123 blocks FX-456"
+		// We want: when viewing FX-123, show "blocks FX-456"
+		// So FX-456 must be the outwardIssue (so FX-123 performs outward action)
+		inwardIssue = issueKey
+		outwardIssue = linkedIssue
+	} else {
+		// User said: "issueKey <inward-action> linkedIssue"
+		// Example: "FX-123 is blocked by FX-456"
+		// We want: when viewing FX-123, show "is blocked by FX-456"
+		// So FX-456 must be the inwardIssue (so FX-123 performs inward action)
+		outwardIssue = issueKey
+		inwardIssue = linkedIssue
+	}
+
+	// Create the link
+	opts := &atlassian.LinkIssueOptions{
+		TypeName:     matchedType.Name,
+		InwardIssue:  inwardIssue,
+		OutwardIssue: outwardIssue,
+		CommentBody:  jiraCreateLinkComment,
+	}
+
+	if err := client.LinkIssues(opts); err != nil {
+		return fmt.Errorf("failed to link issues: %w", err)
+	}
+
+	// Pretty output to confirm what was created
+	if isOutward {
+		fmt.Printf("✓ Linked: %s %s %s\n", issueKey, matchedType.Outward, linkedIssue)
+	} else {
+		fmt.Printf("✓ Linked: %s %s %s\n", issueKey, matchedType.Inward, linkedIssue)
+	}
+
+	if jiraCreateLinkComment != "" {
+		fmt.Printf("  Comment: %s\n", jiraCreateLinkComment)
+	}
+
+	return nil
+}
+
+func runJiraRemoveIssueLink(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+	linkedIssue := jiraRemoveLinkIssue
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	// Get all links for the issue
+	links, err := client.GetIssueLinks(issueKey)
+	if err != nil {
+		return fmt.Errorf("failed to get issue links: %w", err)
+	}
+
+	if len(links) == 0 {
+		fmt.Printf("No links found for %s\n", issueKey)
 		return nil
 	}
 
@@ -1694,10 +1747,10 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 	for _, link := range links {
 		// Check if this link connects to the specified linked issue
 		matchesIssue := false
-		if link.OutwardIssue != nil && link.OutwardIssue.Key == jiraUnlinkLinkedIssue {
+		if link.OutwardIssue != nil && link.OutwardIssue.Key == linkedIssue {
 			matchesIssue = true
 		}
-		if link.InwardIssue != nil && link.InwardIssue.Key == jiraUnlinkLinkedIssue {
+		if link.InwardIssue != nil && link.InwardIssue.Key == linkedIssue {
 			matchesIssue = true
 		}
 
@@ -1706,8 +1759,8 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 		}
 
 		// If type filter is specified, check if it matches
-		if jiraUnlinkType != "" {
-			typeLower := strings.ToLower(strings.TrimSpace(jiraUnlinkType))
+		if jiraRemoveLinkType != "" {
+			typeLower := strings.ToLower(strings.TrimSpace(jiraRemoveLinkType))
 			linkTypeLower := strings.ToLower(link.Type.Name)
 			linkOutwardLower := strings.ToLower(link.Type.Outward)
 			linkInwardLower := strings.ToLower(link.Type.Inward)
@@ -1721,9 +1774,9 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(linksToDelete) == 0 {
-		fmt.Printf("No matching links found between %s and %s", issueKey, jiraUnlinkLinkedIssue)
-		if jiraUnlinkType != "" {
-			fmt.Printf(" with type '%s'", jiraUnlinkType)
+		fmt.Printf("No matching links found between %s and %s", issueKey, linkedIssue)
+		if jiraRemoveLinkType != "" {
+			fmt.Printf(" with type '%s'", jiraRemoveLinkType)
 		}
 		fmt.Println()
 		return nil
@@ -1740,13 +1793,13 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 		var direction string
 
 		if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
-			// The queried issue is the inward issue
+			// The other issue is outwardIssue, so THIS issue performs the OUTWARD action
 			otherIssue = link.OutwardIssue
-			direction = link.Type.Inward
-		} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
-			// The queried issue is the outward issue
-			otherIssue = link.InwardIssue
 			direction = link.Type.Outward
+		} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
+			// The other issue is inwardIssue, so THIS issue performs the INWARD action
+			otherIssue = link.InwardIssue
+			direction = link.Type.Inward
 		}
 
 		if otherIssue != nil {
@@ -1758,3 +1811,4 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
+
