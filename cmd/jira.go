@@ -1667,11 +1667,13 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 				var direction string
 
 				if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
+					// The queried issue is the inward issue
 					otherIssue = link.OutwardIssue
-					direction = link.Type.Outward
-				} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
-					otherIssue = link.InwardIssue
 					direction = link.Type.Inward
+				} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
+					// The queried issue is the outward issue
+					otherIssue = link.InwardIssue
+					direction = link.Type.Outward
 				}
 
 				if otherIssue != nil {
@@ -1738,11 +1740,13 @@ func runJiraUnlinkIssue(cmd *cobra.Command, args []string) error {
 		var direction string
 
 		if link.OutwardIssue != nil && link.OutwardIssue.Key != issueKey {
+			// The queried issue is the inward issue
 			otherIssue = link.OutwardIssue
-			direction = link.Type.Outward
-		} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
-			otherIssue = link.InwardIssue
 			direction = link.Type.Inward
+		} else if link.InwardIssue != nil && link.InwardIssue.Key != issueKey {
+			// The queried issue is the outward issue
+			otherIssue = link.InwardIssue
+			direction = link.Type.Outward
 		}
 
 		if otherIssue != nil {
