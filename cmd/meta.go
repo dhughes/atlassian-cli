@@ -38,33 +38,14 @@ Examples:
 	RunE: runMetaGetResources,
 }
 
-var metaFetchCmd = &cobra.Command{
-	Use:   "fetch <ari>",
-	Short: "Fetch a resource by ARI",
-	Long: `Fetch any Atlassian resource by its ARI (Atlassian Resource Identifier).
-
-NOTE: There is no generic "fetch by ARI" endpoint in the Atlassian REST API.
-This command is a placeholder for MCP parity.
-
-Instead, use the product-specific commands:
-  - atl jira get-issue <key> for Jira issues
-  - atl confluence get-page <id> for Confluence pages
-
-This command is included for MCP parity but is not implemented.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runMetaFetch,
-}
-
 func init() {
 	rootCmd.AddCommand(metaCmd)
 	metaCmd.AddCommand(metaUserInfoCmd)
 	metaCmd.AddCommand(metaGetResourcesCmd)
-	metaCmd.AddCommand(metaFetchCmd)
 
 	// Flags
 	metaUserInfoCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 	metaGetResourcesCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
-	metaFetchCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 }
 
 func runMetaUserInfo(cmd *cobra.Command, args []string) error {
@@ -150,9 +131,4 @@ func runMetaGetResources(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func runMetaFetch(cmd *cobra.Command, args []string) error {
-	_ = args[0] // ari parameter exists but unused
-	return fmt.Errorf("Generic fetch by ARI is not implemented.\n\nThere is no single REST API endpoint for fetching resources by ARI.\n\nInstead, use product-specific commands:\n  - For Jira issues: atl jira get-issue <key>\n  - For Confluence pages: atl confluence get-page <id>\n\nThe MCP server likely parses ARIs and routes to appropriate endpoints.")
 }

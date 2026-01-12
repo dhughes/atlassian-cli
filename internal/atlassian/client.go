@@ -94,13 +94,6 @@ func (c *Client) GetAccessibleResources() ([]AccessibleResource, error) {
 	return resources, nil
 }
 
-// FetchByARI fetches a resource by its ARI (Atlassian Resource Identifier)
-// Note: There is no generic fetch-by-ARI endpoint in the REST API
-// This is a placeholder for MCP parity
-func (c *Client) FetchByARI(ari string) (map[string]any, error) {
-	return nil, fmt.Errorf("fetch by ARI not implemented - use product-specific commands instead")
-}
-
 // UserInfo represents the current user's information
 type UserInfo struct {
 	AccountID   string `json:"accountId"`
