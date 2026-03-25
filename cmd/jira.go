@@ -60,10 +60,16 @@ The --description flag supports MARKDOWN formatting including:
   - Lists (bullets and numbered)
   - Code blocks (` + "```language" + `)
   - Links, blockquotes, and more
+  - Inline images from local files: ![alt text](./path/to/image.png)
+
+Local image references (![alt](./file.png)) are automatically uploaded as
+attachments and embedded inline in the issue description. URLs (http/https)
+are left as-is.
 
 Examples:
   atl jira create-issue --project PROJ --type Task --summary "Do something"
-  atl jira create-issue --project PROJ --type Bug --summary "Fix bug" --description "**Important:** Bug details here"`,
+  atl jira create-issue --project PROJ --type Bug --summary "Fix bug" --description "**Important:** Bug details here"
+  atl jira create-issue --project PROJ --type Bug --summary "UI broken" --description "See bug: ![screenshot](./bug.png)"`,
 	RunE: runJiraCreateIssue,
 }
 
@@ -85,11 +91,14 @@ var jiraEditIssueCmd = &cobra.Command{
 	Long: `Update fields on an existing Jira issue.
 
 The --description flag supports MARKDOWN formatting (headings, bold, lists, code blocks, etc).
+Local image references (![alt](./file.png)) are automatically uploaded as attachments
+and embedded inline in the description.
 
 Examples:
   atl jira edit-issue PROJ-123 --summary "New summary"
   atl jira edit-issue PROJ-123 --description "## Updated\n\n- Point 1\n- Point 2"
-  atl jira edit-issue PROJ-123 --summary "Update" --description "Details with **bold**"`,
+  atl jira edit-issue PROJ-123 --summary "Update" --description "Details with **bold**"
+  atl jira edit-issue PROJ-123 --description "Fixed: ![proof](./fix-screenshot.png)"`,
 	Args: cobra.ExactArgs(1),
 	RunE: runJiraEditIssue,
 }
@@ -250,6 +259,19 @@ Use 'atl jira get-link-types' to see all available link types and their directio
 	RunE: runJiraCreateIssueLink,
 }
 
+var jiraAddAttachmentCmd = &cobra.Command{
+	Use:   "add-attachment <issueKey> <filePath>...",
+	Short: "Upload file attachments to a Jira issue",
+	Long: `Upload one or more files as attachments to a Jira issue.
+
+Examples:
+  atl jira add-attachment PROJ-123 ./screenshot.png
+  atl jira add-attachment PROJ-123 ./image1.png ./image2.jpg ./report.pdf
+  atl jira add-attachment PROJ-123 ./screenshot.png --json`,
+	Args: cobra.MinimumNArgs(2),
+	RunE: runJiraAddAttachment,
+}
+
 var jiraRemoveIssueLinkCmd = &cobra.Command{
 	Use:   "remove-issue-link <issue-key>",
 	Short: "Remove link(s) between two issues",
@@ -361,6 +383,10 @@ func init() {
 	jiraCmd.AddCommand(jiraGetIssueLinksCmd)
 	jiraCmd.AddCommand(jiraCreateIssueLinkCmd)
 	jiraCmd.AddCommand(jiraRemoveIssueLinkCmd)
+	jiraCmd.AddCommand(jiraAddAttachmentCmd)
+
+	// Flags for add-attachment
+	jiraAddAttachmentCmd.Flags().BoolVar(&outputJSON, "json", false, "Output as JSON")
 
 	// Flags for get-issue
 	jiraGetIssueCmd.Flags().StringSliceVar(&jiraGetIssueFields, "fields", []string{}, "Comma-separated list of fields to return")
@@ -726,12 +752,19 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create issue
+	// Check for local image references in description
+	var imageRefs []atlassian.ImageRef
+	description := jiraCreateDescription
+	if description != "" {
+		imageRefs, description = atlassian.ExtractLocalImages(description)
+	}
+
+	// Create issue (with cleaned description if images were found)
 	opts := &atlassian.CreateIssueOptions{
 		ProjectKey:  jiraCreateProject,
 		IssueType:   jiraCreateType,
 		Summary:     jiraCreateSummary,
-		Description: jiraCreateDescription,
+		Description: description,
 		AssigneeID:  jiraCreateAssignee,
 		ParentKey:   jiraCreateParent,
 		Fields:      additionalFields,
@@ -740,6 +773,51 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 	result, err := client.CreateJiraIssue(opts)
 	if err != nil {
 		return fmt.Errorf("failed to create issue: %w", err)
+	}
+
+	key, _ := result["key"].(string)
+
+	// If there are local images, upload them and update the description with inline media
+	if len(imageRefs) > 0 {
+		var mediaNodes []map[string]any
+
+		for _, img := range imageRefs {
+			// Upload the image as attachment
+			attachments, err := client.AddAttachment(key, img.FilePath)
+			if err != nil {
+				fmt.Printf("Warning: failed to upload %s: %v\n", img.FilePath, err)
+				continue
+			}
+
+			if len(attachments) == 0 {
+				fmt.Printf("Warning: no attachment returned for %s\n", img.FilePath)
+				continue
+			}
+
+			// Get the media UUID
+			mediaID, err := client.GetAttachmentMediaID(&attachments[0])
+			if err != nil {
+				fmt.Printf("Warning: failed to get media ID for %s: %v\n", img.FilePath, err)
+				continue
+			}
+
+			mediaNodes = append(mediaNodes, atlassian.BuildMediaSingleNode(mediaID, img.AltText))
+		}
+
+		// Update the issue description with inline images
+		if len(mediaNodes) > 0 {
+			adf, err := atlassian.MarkdownToADFWithImages(description, mediaNodes)
+			if err != nil {
+				fmt.Printf("Warning: failed to build ADF with images: %v\n", err)
+			} else {
+				fields := map[string]any{
+					"description": adf,
+				}
+				if err := client.EditJiraIssue(key, fields); err != nil {
+					fmt.Printf("Warning: failed to update description with images: %v\n", err)
+				}
+			}
+		}
 	}
 
 	if outputJSON {
@@ -751,7 +829,6 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 		fmt.Println(string(output))
 	} else {
 		// Pretty output (default)
-		key, _ := result["key"].(string)
 		id, _ := result["id"].(string)
 
 		// Construct web URL
@@ -762,6 +839,9 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 
 		fmt.Printf("✓ Created issue: %s\n", key)
 		fmt.Printf("  ID: %s\n", id)
+		if len(imageRefs) > 0 {
+			fmt.Printf("  Images: %d attached inline\n", len(imageRefs))
+		}
 		fmt.Printf("  Link: %s\n", webURL)
 		fmt.Printf("\nView details: atl jira get-issue %s\n", key)
 	}
@@ -863,13 +943,47 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 		fields["summary"] = jiraEditSummary
 	}
 
+	var imageCount int
 	if jiraEditDescription != "" {
-		// Convert markdown description to ADF format
-		adf, err := atlassian.MarkdownToADF(jiraEditDescription)
-		if err != nil {
-			return fmt.Errorf("failed to convert description to ADF: %w", err)
+		// Check for local image references
+		imageRefs, cleanedDesc := atlassian.ExtractLocalImages(jiraEditDescription)
+
+		if len(imageRefs) > 0 {
+			// Upload images and build media nodes
+			var mediaNodes []map[string]any
+			for _, img := range imageRefs {
+				attachments, err := client.AddAttachment(issueKey, img.FilePath)
+				if err != nil {
+					fmt.Printf("Warning: failed to upload %s: %v\n", img.FilePath, err)
+					continue
+				}
+				if len(attachments) == 0 {
+					fmt.Printf("Warning: no attachment returned for %s\n", img.FilePath)
+					continue
+				}
+				mediaID, err := client.GetAttachmentMediaID(&attachments[0])
+				if err != nil {
+					fmt.Printf("Warning: failed to get media ID for %s: %v\n", img.FilePath, err)
+					continue
+				}
+				mediaNodes = append(mediaNodes, atlassian.BuildMediaSingleNode(mediaID, img.AltText))
+				imageCount++
+			}
+
+			// Convert cleaned markdown to ADF with media nodes
+			adf, err := atlassian.MarkdownToADFWithImages(cleanedDesc, mediaNodes)
+			if err != nil {
+				return fmt.Errorf("failed to convert description to ADF: %w", err)
+			}
+			fields["description"] = adf
+		} else {
+			// No images - standard markdown to ADF conversion
+			adf, err := atlassian.MarkdownToADF(jiraEditDescription)
+			if err != nil {
+				return fmt.Errorf("failed to convert description to ADF: %w", err)
+			}
+			fields["description"] = adf
 		}
-		fields["description"] = adf
 	}
 
 	if jiraEditAssignee != "" {
@@ -905,11 +1019,57 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 		if jiraEditDescription != "" {
 			fmt.Printf("  Description: updated\n")
 		}
+		if imageCount > 0 {
+			fmt.Printf("  Images: %d attached inline\n", imageCount)
+		}
 		if jiraEditAssignee != "" {
 			fmt.Printf("  Assignee: %s\n", jiraEditAssignee)
 		}
 		if jiraEditFields != "" {
 			fmt.Printf("  Additional fields: updated\n")
+		}
+	}
+
+	return nil
+}
+
+func runJiraAddAttachment(cmd *cobra.Command, args []string) error {
+	issueKey := args[0]
+	filePaths := args[1:]
+
+	// Load config and get active account
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	account, err := cfg.GetActiveAccount()
+	if err != nil {
+		return fmt.Errorf("not logged in. Run 'atl auth login' first")
+	}
+
+	// Create client
+	client := atlassian.NewClient(account.Email, account.Token, account.Site)
+
+	var allAttachments []atlassian.Attachment
+
+	for _, filePath := range filePaths {
+		attachments, err := client.AddAttachment(issueKey, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to upload %s: %w", filePath, err)
+		}
+		allAttachments = append(allAttachments, attachments...)
+	}
+
+	if outputJSON {
+		output, err := json.MarshalIndent(allAttachments, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		for _, att := range allAttachments {
+			fmt.Printf("✓ Attached %s to %s (attachment ID: %s)\n", att.Filename, issueKey, att.ID)
 		}
 	}
 
