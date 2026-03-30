@@ -146,6 +146,37 @@ func processNode(node map[string]any, sb *strings.Builder, indent int) {
 		shortName, _ := attrs["shortName"].(string)
 		sb.WriteString(shortName)
 
+	case "mediaSingle":
+		for _, child := range content {
+			if childMap, ok := child.(map[string]any); ok {
+				processNode(childMap, sb, indent)
+			}
+		}
+		sb.WriteString("\n")
+
+	case "media":
+		attrs, _ := node["attrs"].(map[string]any)
+		alt, _ := attrs["alt"].(string)
+		if alt != "" {
+			sb.WriteString(fmt.Sprintf("[Image: %s]", alt))
+		} else {
+			filename, _ := attrs["filename"].(string)
+			if filename != "" {
+				sb.WriteString(fmt.Sprintf("[Attached image: %s]", filename))
+			} else {
+				sb.WriteString("[Attached image]")
+			}
+		}
+
+	case "mediaInline":
+		attrs, _ := node["attrs"].(map[string]any)
+		alt, _ := attrs["alt"].(string)
+		if alt != "" {
+			sb.WriteString(fmt.Sprintf("[%s]", alt))
+		} else {
+			sb.WriteString("[image]")
+		}
+
 	case "inlineCard", "blockCard":
 		attrs, _ := node["attrs"].(map[string]any)
 		url, _ := attrs["url"].(string)

@@ -494,6 +494,153 @@ func TestADFToText_Table(t *testing.T) {
 	}
 }
 
+func TestADFToText_MediaSingle_WithAlt(t *testing.T) {
+	adf := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type": "mediaSingle",
+				"attrs": map[string]any{
+					"layout": "center",
+				},
+				"content": []any{
+					map[string]any{
+						"type": "media",
+						"attrs": map[string]any{
+							"id":         "abc-123",
+							"type":       "file",
+							"collection": "",
+							"alt":        "screenshot",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := ADFToText(adf)
+	if !strings.Contains(result, "[Image: screenshot]") {
+		t.Errorf("Expected '[Image: screenshot]', got %q", result)
+	}
+}
+
+func TestADFToText_MediaSingle_WithFilename(t *testing.T) {
+	adf := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type": "mediaSingle",
+				"attrs": map[string]any{
+					"layout": "center",
+				},
+				"content": []any{
+					map[string]any{
+						"type": "media",
+						"attrs": map[string]any{
+							"id":       "abc-123",
+							"type":     "file",
+							"filename": "report.png",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := ADFToText(adf)
+	if !strings.Contains(result, "[Attached image: report.png]") {
+		t.Errorf("Expected '[Attached image: report.png]', got %q", result)
+	}
+}
+
+func TestADFToText_MediaSingle_NoAltNoFilename(t *testing.T) {
+	adf := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type": "mediaSingle",
+				"attrs": map[string]any{
+					"layout": "center",
+				},
+				"content": []any{
+					map[string]any{
+						"type": "media",
+						"attrs": map[string]any{
+							"id":   "abc-123",
+							"type": "file",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := ADFToText(adf)
+	if !strings.Contains(result, "[Attached image]") {
+		t.Errorf("Expected '[Attached image]', got %q", result)
+	}
+}
+
+func TestADFToText_MediaInline_WithAlt(t *testing.T) {
+	adf := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type": "paragraph",
+				"content": []any{
+					map[string]any{
+						"type": "text",
+						"text": "See this: ",
+					},
+					map[string]any{
+						"type": "mediaInline",
+						"attrs": map[string]any{
+							"id":  "abc-123",
+							"alt": "icon",
+						},
+					},
+					map[string]any{
+						"type": "text",
+						"text": " for details",
+					},
+				},
+			},
+		},
+	}
+
+	result := ADFToText(adf)
+	if !strings.Contains(result, "[icon]") {
+		t.Errorf("Expected '[icon]' inline, got %q", result)
+	}
+	if !strings.Contains(result, "See this: [icon] for details") {
+		t.Errorf("Expected full inline text, got %q", result)
+	}
+}
+
+func TestADFToText_MediaInline_NoAlt(t *testing.T) {
+	adf := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type": "paragraph",
+				"content": []any{
+					map[string]any{
+						"type": "mediaInline",
+						"attrs": map[string]any{
+							"id": "abc-123",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := ADFToText(adf)
+	if !strings.Contains(result, "[image]") {
+		t.Errorf("Expected '[image]' fallback, got %q", result)
+	}
+}
+
 func TestADFToText_ComplexDocument(t *testing.T) {
 	adf := map[string]any{
 		"type": "doc",

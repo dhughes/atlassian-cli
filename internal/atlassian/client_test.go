@@ -3,6 +3,7 @@ package atlassian
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -579,5 +580,195 @@ func TestGetFieldOptions_Success(t *testing.T) {
 
 	if len(allowedValues) != 2 {
 		t.Errorf("Expected 2 allowed values, got %d", len(allowedValues))
+	}
+}
+
+func TestDoMultipartUpload_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify method
+		if r.Method != "POST" {
+			t.Errorf("Expected POST request, got %s", r.Method)
+		}
+
+		// Verify headers
+		contentType := r.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "multipart/form-data") {
+			t.Errorf("Expected multipart/form-data Content-Type, got %q", contentType)
+		}
+
+		xToken := r.Header.Get("X-Atlassian-Token")
+		if xToken != "no-check" {
+			t.Errorf("Expected X-Atlassian-Token 'no-check', got %q", xToken)
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Basic ") {
+			t.Errorf("Expected Basic auth header, got %q", authHeader)
+		}
+
+		// Parse multipart form
+		err := r.ParseMultipartForm(10 << 20)
+		if err != nil {
+			t.Fatalf("Failed to parse multipart form: %v", err)
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("Failed to get form file: %v", err)
+		}
+		defer file.Close()
+
+		if header.Filename != "test.png" {
+			t.Errorf("Expected filename 'test.png', got %q", header.Filename)
+		}
+
+		data, _ := io.ReadAll(file)
+		if string(data) != "fake image data" {
+			t.Errorf("Expected file content 'fake image data', got %q", string(data))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"id":"10001","filename":"test.png"}]`))
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token", server.URL)
+
+	resp, err := client.doMultipartUpload(server.URL+"/upload", "file", "test.png", strings.NewReader("fake image data"))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAddAttachment_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("Expected POST request, got %s", r.Method)
+		}
+		if !strings.Contains(r.URL.Path, "/rest/api/3/issue/ABC-123/attachments") {
+			t.Errorf("Expected attachment path, got %s", r.URL.Path)
+		}
+
+		response := []map[string]any{
+			{
+				"id":        "10001",
+				"filename":  "client_test.go",
+				"mimeType":  "application/octet-stream",
+				"size":      1234,
+				"content":   "https://example.com/download/10001",
+				"thumbnail": "https://example.com/thumbnail/10001",
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token", server.URL)
+
+	// Use this test file itself as the attachment (we know it exists)
+	attachments, err := client.AddAttachment("ABC-123", "client_test.go")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(attachments) != 1 {
+		t.Fatalf("Expected 1 attachment, got %d", len(attachments))
+	}
+
+	if attachments[0].ID != "10001" {
+		t.Errorf("Expected attachment ID '10001', got %q", attachments[0].ID)
+	}
+	if attachments[0].Filename != "client_test.go" {
+		t.Errorf("Expected filename 'client_test.go', got %q", attachments[0].Filename)
+	}
+}
+
+func TestAddAttachment_FileNotFound(t *testing.T) {
+	client := NewClient("user@example.com", "token", "https://example.com")
+
+	_, err := client.AddAttachment("ABC-123", "/nonexistent/file.png")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent file, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to open file") {
+		t.Errorf("Expected 'failed to open file' error, got %v", err)
+	}
+}
+
+func TestGetAttachmentMediaID_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a redirect with a Location header containing media UUID
+		w.Header().Set("Location", "https://api.media.atlassian.com/file/a1b2c3d4-e5f6-7890-abcd-ef1234567890/binary?token=xyz")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token", server.URL)
+
+	att := &Attachment{
+		Content: server.URL + "/download",
+	}
+
+	mediaID, err := client.GetAttachmentMediaID(att)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	expected := "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+	if mediaID != expected {
+		t.Errorf("Expected media ID %q, got %q", expected, mediaID)
+	}
+}
+
+func TestGetAttachmentMediaID_NoRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return 200 instead of redirect
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("file contents"))
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token", server.URL)
+
+	att := &Attachment{
+		Content: server.URL + "/download",
+	}
+
+	_, err := client.GetAttachmentMediaID(att)
+	if err == nil {
+		t.Fatal("Expected error for non-redirect response, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected redirect") {
+		t.Errorf("Expected 'expected redirect' error, got %v", err)
+	}
+}
+
+func TestGetAttachmentMediaID_NoMediaIDInURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "https://example.com/some/other/url")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token", server.URL)
+
+	att := &Attachment{
+		Content: server.URL + "/download",
+	}
+
+	_, err := client.GetAttachmentMediaID(att)
+	if err == nil {
+		t.Fatal("Expected error for URL without media ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "could not extract media ID") {
+		t.Errorf("Expected 'could not extract media ID' error, got %v", err)
 	}
 }

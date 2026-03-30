@@ -96,6 +96,16 @@ Removes stored credentials for the active account.
   --summary "Implement new feature" \
   --description "## Details\n- First step\n- Second step"
 
+# Create an issue with an inline image
+./atl jira create-issue \
+  --project ABC \
+  --type Bug \
+  --summary "Login page broken" \
+  --description "The login button is misaligned: ![screenshot](./bug.png)"
+
+# Upload attachments to an existing issue
+./atl jira add-attachment ABC-123 ./screenshot.png ./logs.txt
+
 # Discover required fields for creating issues
 ./atl jira get-create-meta ABC 10002
 ./atl jira get-field-options customfield_10369 --project ABC --issue-type-id 10002
@@ -229,6 +239,8 @@ See [SEARCH.md](SEARCH.md) for detailed examples and guidance.
 - Issue operations: `get-issue`, `create-issue`, `edit-issue`
 - Search: `search-jql`
 - Comments: `add-comment`
+- Attachments: `add-attachment` (upload files to issues)
+- Inline images: embed local images in descriptions via `![alt](./path.png)`
 - Workflow: `get-transitions`, `transition-issue`
 - Project info: `get-projects`, `get-project-issue-types`
 - Field discovery: `get-create-meta`, `get-field-options`
@@ -244,6 +256,7 @@ See [SEARCH.md](SEARCH.md) for detailed examples and guidance.
 
 **Content Formatting:**
 - Markdown-to-ADF conversion for Jira descriptions
+- Inline image support: `![alt](./local-file.png)` in descriptions auto-uploads and embeds
 - HTML rendering for Confluence pages (readable terminal output)
 - Pretty-printed output by default
 

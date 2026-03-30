@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -1578,4 +1582,129 @@ func (c *Client) DeleteIssueLink(linkID string) error {
 	}
 
 	return nil
+}
+
+// doMultipartUpload performs a multipart form file upload with authentication
+func (c *Client) doMultipartUpload(url string, fieldName string, fileName string, fileReader io.Reader) (*http.Response, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create form file: %w", err)
+	}
+
+	if _, err := io.Copy(part, fileReader); err != nil {
+		return nil, fmt.Errorf("failed to copy file data: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", c.basicAuth())
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Atlassian-Token", "no-check")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+
+	return resp, nil
+}
+
+// Attachment represents a Jira attachment
+type Attachment struct {
+	ID        string `json:"id"`
+	Filename  string `json:"filename"`
+	MimeType  string `json:"mimeType"`
+	Size      int64  `json:"size"`
+	Content   string `json:"content"`   // download URL
+	Thumbnail string `json:"thumbnail"` // thumbnail URL
+}
+
+// AddAttachment uploads a file attachment to a Jira issue
+func (c *Client) AddAttachment(issueKey string, filePath string) ([]Attachment, error) {
+	apiURL := fmt.Sprintf("%s/rest/api/3/issue/%s/attachments", c.BaseURL, issueKey)
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	fileName := filepath.Base(filePath)
+
+	resp, err := c.doMultipartUpload(apiURL, "file", fileName, f)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to add attachment (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var attachments []Attachment
+	if err := json.NewDecoder(resp.Body).Decode(&attachments); err != nil {
+		return nil, fmt.Errorf("failed to decode attachment response: %w", err)
+	}
+
+	return attachments, nil
+}
+
+// mediaIDRegexp extracts UUID from Atlassian media URLs
+var mediaIDRegexp = regexp.MustCompile(`/file/([0-9a-f-]{36})/`)
+
+// GetAttachmentMediaID retrieves the media UUID for an attachment by following
+// its content URL redirect to the media API
+func (c *Client) GetAttachmentMediaID(attachment *Attachment) (string, error) {
+	// Create a client that doesn't follow redirects
+	noRedirectClient := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	req, err := http.NewRequest("GET", attachment.Content, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", c.basicAuth())
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := noRedirectClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Expect a redirect (3xx)
+	if resp.StatusCode < 300 || resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("expected redirect, got status %d: %s", resp.StatusCode, string(body))
+	}
+
+	location := resp.Header.Get("Location")
+	if location == "" {
+		return "", fmt.Errorf("no Location header in redirect response")
+	}
+
+	// Extract UUID from the Location URL
+	matches := mediaIDRegexp.FindStringSubmatch(location)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("could not extract media ID from URL: %s", location)
+	}
+
+	return matches[1], nil
 }
