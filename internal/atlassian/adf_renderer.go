@@ -99,8 +99,8 @@ func (r *adfRenderer) ancestorHasType(nodeType string) bool {
 	return false
 }
 
-func (r *adfRenderer) parentType() string {
-	if len(r.stack) < 2 {
+func (r *adfRenderer) currentType() string {
+	if len(r.stack) == 0 {
 		return ""
 	}
 	return r.stack[len(r.stack)-1].Type
@@ -378,10 +378,10 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 		if entering {
 			if r.ancestorHasType("blockquote") {
 				r.warn("nested blockquote flattened (not supported in ADF)")
-			} else if r.parentType() == "listItem" {
+			} else if r.currentType() == "listItem" {
 				r.warn("blockquote inside list item flattened (not supported in ADF)")
 			}
-			if r.ancestorHasType("blockquote") || r.parentType() == "listItem" {
+			if r.ancestorHasType("blockquote") || r.currentType() == "listItem" {
 			} else {
 				r.push(&adfNode{Type: "blockquote"})
 			}

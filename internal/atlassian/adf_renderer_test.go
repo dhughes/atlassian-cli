@@ -655,6 +655,66 @@ func TestRenderer_TaskItem_InlineContent(t *testing.T) {
 	}
 }
 
+func TestRenderer_NestedTaskList(t *testing.T) {
+	md := "- [ ] Parent task\n  - [ ] Child task\n  - [x] Done child"
+	adf := mustRenderADF(t, md)
+	nodes := contentNodes(t, adf)
+
+	if nodes[0]["type"] != "taskList" {
+		t.Fatalf("expected taskList, got %v", nodes[0]["type"])
+	}
+
+	topItems := nodeContent(t, nodes[0])
+
+	hasNestedTaskList := false
+	for _, item := range topItems {
+		if item["type"] == "taskList" {
+			hasNestedTaskList = true
+			nestedItems := nodeContent(t, item)
+			for _, ni := range nestedItems {
+				if ni["type"] != "taskItem" {
+					t.Errorf("expected taskItem in nested list, got %v", ni["type"])
+				}
+			}
+		}
+	}
+	if !hasNestedTaskList {
+		t.Error("expected nested taskList as sibling in parent taskList")
+	}
+}
+
+func TestRenderer_TableAlignmentWarning(t *testing.T) {
+	md := "| Left | Center | Right |\n| :--- | :---: | ---: |\n| a | b | c |"
+	_, warnings, err := MarkdownToADF(md)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "alignment") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about table alignment, got: %v", warnings)
+	}
+}
+
+func TestRenderer_TableNoAlignmentWarning(t *testing.T) {
+	md := "| A | B |\n| --- | --- |\n| 1 | 2 |"
+	_, warnings, err := MarkdownToADF(md)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, w := range warnings {
+		if strings.Contains(w, "alignment") {
+			t.Errorf("expected no alignment warning for left-aligned table, got: %s", w)
+		}
+	}
+}
+
 func TestRenderer_RemoteImage(t *testing.T) {
 	adf := mustRenderADF(t, "![screenshot](https://example.com/img.png)")
 	s := adfJSON(t, adf)
