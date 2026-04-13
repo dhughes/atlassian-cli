@@ -3,6 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/doughughes/atlassian-cli/internal/atlassian"
@@ -777,13 +782,26 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 
 	key, _ := result["key"].(string)
 
-	// If there are local images, upload them and update the description with inline media
+	// If there are images, upload them and update the description with inline media
 	if len(imageRefs) > 0 {
 		var mediaNodes []map[string]any
 
 		for _, img := range imageRefs {
+			filePath := img.FilePath
+
+			// Download remote images to a temp file first
+			if img.Remote {
+				tmpPath, err := downloadImageToTemp(img.FilePath)
+				if err != nil {
+					fmt.Printf("Warning: %v\n", err)
+					continue
+				}
+				defer os.Remove(tmpPath)
+				filePath = tmpPath
+			}
+
 			// Upload the image as attachment
-			attachments, err := client.AddAttachment(key, img.FilePath)
+			attachments, err := client.AddAttachment(key, filePath)
 			if err != nil {
 				fmt.Printf("Warning: failed to upload %s: %v\n", img.FilePath, err)
 				continue
@@ -952,10 +970,37 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 		imageRefs, cleanedDesc := atlassian.ExtractLocalImages(jiraEditDescription)
 
 		if len(imageRefs) > 0 {
+			// Check existing attachments to avoid re-uploading
+			existing := getExistingAttachments(client, issueKey)
+
 			// Upload images and build media nodes
 			var mediaNodes []map[string]any
 			for _, img := range imageRefs {
-				attachments, err := client.AddAttachment(issueKey, img.FilePath)
+				filePath := img.FilePath
+
+				// Download remote images to a temp file first
+				if img.Remote {
+					tmpPath, err := downloadImageToTemp(img.FilePath)
+					if err != nil {
+						fmt.Printf("Warning: %v\n", err)
+						continue
+					}
+					defer os.Remove(tmpPath)
+					filePath = tmpPath
+				}
+
+				// Check if this file was already uploaded
+				filename := filepath.Base(filePath)
+				if att, ok := existing[filename]; ok {
+					mediaID, err := client.GetAttachmentMediaID(att)
+					if err == nil {
+						mediaNodes = append(mediaNodes, atlassian.BuildMediaSingleNode(mediaID, img.AltText))
+						imageCount++
+						continue
+					}
+				}
+
+				attachments, err := client.AddAttachment(issueKey, filePath)
 				if err != nil {
 					fmt.Printf("Warning: failed to upload %s: %v\n", img.FilePath, err)
 					continue
@@ -1978,5 +2023,70 @@ func runJiraRemoveIssueLink(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nRemoved %d link(s)\n", len(linksToDelete))
 
 	return nil
+}
+
+// getExistingAttachments fetches the issue's attachments and returns a map of
+// filename → Attachment for the most recent upload of each filename.
+func getExistingAttachments(client *atlassian.Client, issueKey string) map[string]*atlassian.Attachment {
+	result := map[string]*atlassian.Attachment{}
+	issue, err := client.GetJiraIssue(issueKey, &atlassian.GetIssueOptions{
+		Fields: []string{"attachment"},
+	})
+	if err != nil {
+		return result
+	}
+	fields, _ := issue["fields"].(map[string]any)
+	attachments, _ := fields["attachment"].([]any)
+	for _, a := range attachments {
+		att, _ := a.(map[string]any)
+		filename, _ := att["filename"].(string)
+		id, _ := att["id"].(string)
+		content, _ := att["content"].(string)
+		if filename != "" && id != "" {
+			result[filename] = &atlassian.Attachment{
+				ID:       id,
+				Filename: filename,
+				Content:  content,
+			}
+		}
+	}
+	return result
+}
+
+// downloadImageToTemp downloads a remote image URL to a temporary file and
+// returns the path. The filename is derived from the URL so repeated downloads
+// of the same URL produce the same filename (enabling dedup). The caller is
+// responsible for removing the file.
+func downloadImageToTemp(rawURL string) (string, error) {
+	resp, err := http.Get(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to download %s: %w", rawURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download %s: HTTP %d", rawURL, resp.StatusCode)
+	}
+
+	// Use the URL's actual filename so Jira gets a sensible name and we can
+	// match against existing attachments for dedup.
+	filename := path.Base(rawURL)
+	if filename == "" || filename == "." || filename == "/" {
+		filename = "remote-image.png"
+	}
+
+	tmpPath := filepath.Join(os.TempDir(), filename)
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to write image: %w", err)
+	}
+
+	return tmpPath, nil
 }
 

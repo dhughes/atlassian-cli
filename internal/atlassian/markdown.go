@@ -27,11 +27,12 @@ func MarkdownToADF(markdown string) (map[string]any, []string, error) {
 	return adf, warnings, nil
 }
 
-// ImageRef represents a local image reference found in markdown
+// ImageRef represents an image reference found in markdown
 type ImageRef struct {
 	AltText  string // alt text from ![alt](path)
-	FilePath string // local file path
+	FilePath string // local file path (or remote URL if Remote is true)
 	Original string // original markdown syntax e.g. ![alt](path)
+	Remote   bool   // true if this is a remote URL (http/https)
 }
 
 // imageRegexp matches markdown image syntax: ![alt](path)
@@ -59,15 +60,29 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 		altText    string
 		path       string
 		fullMatch  string
+		remote     bool
 	}
 	var locals []localMatch
 
-	// Standard markdown images: ![alt](path)
+	// Standard markdown images: ![alt](path) or ![alt](path "title")
 	for _, m := range imageRegexp.FindAllStringSubmatchIndex(markdown, -1) {
 		altText := markdown[m[2]:m[3]]
 		path := markdown[m[4]:m[5]]
 
+		// Strip optional markdown title: ![alt](url "title") or ![alt](url 'title')
+		if idx := strings.IndexAny(path, `"'`); idx > 0 {
+			path = strings.TrimSpace(path[:idx])
+		}
+
 		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			locals = append(locals, localMatch{
+				start:     m[0],
+				end:       m[1],
+				altText:   altText,
+				path:      path,
+				fullMatch: markdown[m[0]:m[1]],
+				remote:    true,
+			})
 			continue
 		}
 		if _, err := os.Stat(path); err != nil {
@@ -114,6 +129,7 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 			AltText:  lm.altText,
 			FilePath: lm.path,
 			Original: lm.fullMatch,
+			Remote:   lm.remote,
 		}
 	}
 

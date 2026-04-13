@@ -220,27 +220,36 @@ func TestExtractLocalImages_NoImages(t *testing.T) {
 	}
 }
 
-func TestExtractLocalImages_URLsIgnored(t *testing.T) {
+func TestExtractLocalImages_RemoteURLsExtracted(t *testing.T) {
 	markdown := "![logo](https://example.com/logo.png)"
 	images, cleaned := ExtractLocalImages(markdown)
 
-	if len(images) != 0 {
-		t.Errorf("Expected 0 images (URLs should be ignored), got %d", len(images))
+	if len(images) != 1 {
+		t.Fatalf("Expected 1 image, got %d", len(images))
 	}
-	if cleaned != markdown {
-		t.Errorf("Expected cleaned to equal original for URL images, got %q", cleaned)
+	if !images[0].Remote {
+		t.Error("Expected image to be marked as Remote")
+	}
+	if images[0].FilePath != "https://example.com/logo.png" {
+		t.Errorf("Expected URL as FilePath, got %q", images[0].FilePath)
+	}
+	if cleaned != "ATLIMG_PLACEHOLDER_0" {
+		t.Errorf("Expected placeholder, got %q", cleaned)
 	}
 }
 
-func TestExtractLocalImages_HttpIgnored(t *testing.T) {
+func TestExtractLocalImages_HttpExtracted(t *testing.T) {
 	markdown := "![logo](http://example.com/logo.png)"
 	images, cleaned := ExtractLocalImages(markdown)
 
-	if len(images) != 0 {
-		t.Errorf("Expected 0 images (http URLs should be ignored), got %d", len(images))
+	if len(images) != 1 {
+		t.Fatalf("Expected 1 image, got %d", len(images))
 	}
-	if cleaned != markdown {
-		t.Errorf("Expected cleaned to equal original for http URL images, got %q", cleaned)
+	if !images[0].Remote {
+		t.Error("Expected image to be marked as Remote")
+	}
+	if cleaned != "ATLIMG_PLACEHOLDER_0" {
+		t.Errorf("Expected placeholder, got %q", cleaned)
 	}
 }
 
@@ -293,16 +302,21 @@ func TestExtractLocalImages_MixedContent(t *testing.T) {
 	markdown := "Text ![web](https://example.com/img.png) and ![local](" + imgPath + ") end"
 	images, cleaned := ExtractLocalImages(markdown)
 
-	if len(images) != 1 {
-		t.Fatalf("Expected 1 local image, got %d", len(images))
+	if len(images) != 2 {
+		t.Fatalf("Expected 2 images (1 remote + 1 local), got %d", len(images))
 	}
-	if images[0].FilePath != imgPath {
-		t.Errorf("Expected local image path, got %q", images[0].FilePath)
+	if !images[0].Remote {
+		t.Error("Expected first image to be remote")
+	}
+	if images[1].Remote {
+		t.Error("Expected second image to be local")
+	}
+	if images[1].FilePath != imgPath {
+		t.Errorf("Expected local image path, got %q", images[1].FilePath)
 	}
 
-	// URL image should be untouched
-	if cleaned != "Text ![web](https://example.com/img.png) and ATLIMG_PLACEHOLDER_0 end" {
-		t.Errorf("Expected mixed cleaned markdown, got %q", cleaned)
+	if cleaned != "Text ATLIMG_PLACEHOLDER_0 and ATLIMG_PLACEHOLDER_1 end" {
+		t.Errorf("Expected both placeholders, got %q", cleaned)
 	}
 }
 
