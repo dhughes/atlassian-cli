@@ -635,6 +635,26 @@ func TestRenderer_TaskList_Mixed(t *testing.T) {
 	}
 }
 
+func TestRenderer_TaskItem_InlineContent(t *testing.T) {
+	md := "- [ ] Task text here"
+	adf := mustRenderADF(t, md)
+	nodes := contentNodes(t, adf)
+	items := nodeContent(t, nodes[0])
+	item := items[0]
+	children := nodeContent(t, item)
+
+	for _, child := range children {
+		if child["type"] == "paragraph" {
+			t.Error("taskItem should contain inline nodes directly, not wrapped in paragraph")
+		}
+	}
+
+	s := adfJSON(t, adf)
+	if !strings.Contains(s, "Task text") {
+		t.Errorf("expected task text in output, got %s", s)
+	}
+}
+
 func TestRenderer_RemoteImage(t *testing.T) {
 	adf := mustRenderADF(t, "![screenshot](https://example.com/img.png)")
 	s := adfJSON(t, adf)
@@ -807,6 +827,19 @@ func TestRenderer_WarningsReturned(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected warning about remote image, got: %v", warnings)
+	}
+}
+
+func TestRenderer_EscapedCharacters(t *testing.T) {
+	md := `This has \*escaped\* chars`
+	adf := mustRenderADF(t, md)
+	s := adfJSON(t, adf)
+	t.Logf("ADF: %s", s)
+	if strings.Contains(s, `\\*`) || strings.Contains(s, `\*`) {
+		t.Errorf("backslash escapes should be stripped, got: %s", s)
+	}
+	if !strings.Contains(s, "*") {
+		t.Error("expected literal asterisk in output")
 	}
 }
 

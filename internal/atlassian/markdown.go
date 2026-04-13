@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -35,6 +37,9 @@ type ImageRef struct {
 // imageRegexp matches markdown image syntax: ![alt](path)
 var imageRegexp = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
 
+// obsidianImageRegexp matches Obsidian wiki-link image syntax: ![[filename]]
+var obsidianImageRegexp = regexp.MustCompile(`!\[\[([^\]]+)\]\]`)
+
 // imagePlaceholderPrefix is used to create unique indexed placeholders that can
 // be located in the ADF tree after markdown conversion, allowing media nodes to
 // be inserted at the correct position rather than appended at the end.
@@ -49,8 +54,6 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 	var images []ImageRef
 	cleaned := markdown
 
-	// First pass: collect all local images in forward order to assign indices
-	matches := imageRegexp.FindAllStringSubmatchIndex(markdown, -1)
 	type localMatch struct {
 		start, end int
 		altText    string
@@ -58,16 +61,15 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 		fullMatch  string
 	}
 	var locals []localMatch
-	for _, m := range matches {
+
+	// Standard markdown images: ![alt](path)
+	for _, m := range imageRegexp.FindAllStringSubmatchIndex(markdown, -1) {
 		altText := markdown[m[2]:m[3]]
 		path := markdown[m[4]:m[5]]
 
-		// Skip URLs
 		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 			continue
 		}
-
-		// Only include if the file exists on disk
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
@@ -81,7 +83,31 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 		})
 	}
 
-	// Build images list and replace in reverse order to preserve indices
+	// Obsidian wiki-link images: ![[filename]]
+	for _, m := range obsidianImageRegexp.FindAllStringSubmatchIndex(markdown, -1) {
+		path := markdown[m[2]:m[3]]
+
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+
+		locals = append(locals, localMatch{
+			start:     m[0],
+			end:       m[1],
+			altText:   filepath.Base(path),
+			path:      path,
+			fullMatch: markdown[m[0]:m[1]],
+		})
+	}
+
+	// Sort by start position so indices are assigned in document order
+	sort.Slice(locals, func(i, j int) bool {
+		return locals[i].start < locals[j].start
+	})
+
 	images = make([]ImageRef, len(locals))
 	for i, lm := range locals {
 		images[i] = ImageRef{
@@ -91,6 +117,7 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 		}
 	}
 
+	// Replace in reverse order to preserve indices
 	for i := len(locals) - 1; i >= 0; i-- {
 		lm := locals[i]
 		placeholder := fmt.Sprintf("%s%d", imagePlaceholderPrefix, i)

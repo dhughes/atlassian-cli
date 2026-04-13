@@ -329,6 +329,70 @@ func TestExtractLocalImages_EmptyAltText(t *testing.T) {
 	}
 }
 
+func TestExtractLocalImages_ObsidianSyntax(t *testing.T) {
+	tmpDir := t.TempDir()
+	imgPath := filepath.Join(tmpDir, "screenshot.png")
+	if err := os.WriteFile(imgPath, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "See this: ![[" + imgPath + "]]"
+	images, cleaned := ExtractLocalImages(markdown)
+
+	if len(images) != 1 {
+		t.Fatalf("Expected 1 image from Obsidian syntax, got %d", len(images))
+	}
+	if images[0].FilePath != imgPath {
+		t.Errorf("Expected path %q, got %q", imgPath, images[0].FilePath)
+	}
+	if images[0].AltText != "screenshot.png" {
+		t.Errorf("Expected alt text from filename, got %q", images[0].AltText)
+	}
+	if cleaned != "See this: ATLIMG_PLACEHOLDER_0" {
+		t.Errorf("Expected placeholder, got %q", cleaned)
+	}
+}
+
+func TestExtractLocalImages_ObsidianNonexistent(t *testing.T) {
+	markdown := "![[/nonexistent/image.png]]"
+	images, cleaned := ExtractLocalImages(markdown)
+
+	if len(images) != 0 {
+		t.Errorf("Expected 0 images for nonexistent file, got %d", len(images))
+	}
+	if cleaned != markdown {
+		t.Errorf("Expected unchanged markdown, got %q", cleaned)
+	}
+}
+
+func TestExtractLocalImages_MixedStandardAndObsidian(t *testing.T) {
+	tmpDir := t.TempDir()
+	img1 := filepath.Join(tmpDir, "std.png")
+	img2 := filepath.Join(tmpDir, "obs.png")
+	if err := os.WriteFile(img1, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(img2, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "![standard](" + img1 + ") and ![[" + img2 + "]]"
+	images, cleaned := ExtractLocalImages(markdown)
+
+	if len(images) != 2 {
+		t.Fatalf("Expected 2 images, got %d", len(images))
+	}
+	if images[0].FilePath != img1 {
+		t.Errorf("Expected first image %q, got %q", img1, images[0].FilePath)
+	}
+	if images[1].FilePath != img2 {
+		t.Errorf("Expected second image %q, got %q", img2, images[1].FilePath)
+	}
+	if cleaned != "ATLIMG_PLACEHOLDER_0 and ATLIMG_PLACEHOLDER_1" {
+		t.Errorf("Expected both placeholders, got %q", cleaned)
+	}
+}
+
 func TestBuildMediaSingleNode_WithAlt(t *testing.T) {
 	node := BuildMediaSingleNode("abc-123-def", "screenshot")
 

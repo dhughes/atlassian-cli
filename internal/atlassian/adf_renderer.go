@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -105,6 +106,31 @@ func (r *adfRenderer) parentType() string {
 	return r.stack[len(r.stack)-1].Type
 }
 
+var commonMarkEscapable = func() map[byte]bool {
+	m := map[byte]bool{}
+	for _, c := range []byte(`!\#$%&'()*+,-./:;<=>?@[\]^_{|}~` + "`") {
+		m[c] = true
+	}
+	return m
+}()
+
+func stripEscapes(s string) string {
+	if !strings.Contains(s, "\\") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && commonMarkEscapable[s[i+1]] {
+			b.WriteByte(s[i+1])
+			i++
+		} else {
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
 func (r *adfRenderer) AddOptions(...renderer.Option) {}
 
 func (r *adfRenderer) Render(w io.Writer, source []byte, n ast.Node) error {
@@ -162,7 +188,7 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 
 	case *ast.Text:
 		if entering {
-			text := string(n.Text(source))
+			text := stripEscapes(string(n.Text(source)))
 			if len(text) > 0 {
 				textNode := &adfNode{Type: "text", Text: text}
 				if marks := r.currentMarks(); marks != nil {
@@ -195,7 +221,9 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 		}
 
 	case *ast.TextBlock:
-		if entering {
+		if r.current().Type == "taskItem" {
+			// taskItem expects inline content directly, no paragraph wrapper
+		} else if entering {
 			r.push(&adfNode{Type: "paragraph"})
 		} else {
 			r.pop()
@@ -425,16 +453,11 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 		}
 
 	case *extAst.TaskCheckBox:
-		if entering {
-			if n.IsChecked {
-				if r.current().Type == "paragraph" {
-					// Walk up to the taskItem parent to set state
-					for i := len(r.stack) - 1; i >= 0; i-- {
-						if r.stack[i].Type == "taskItem" {
-							r.stack[i].Attrs["state"] = "DONE"
-							break
-						}
-					}
+		if entering && n.IsChecked {
+			for i := len(r.stack) - 1; i >= 0; i-- {
+				if r.stack[i].Type == "taskItem" {
+					r.stack[i].Attrs["state"] = "DONE"
+					break
 				}
 			}
 		}
