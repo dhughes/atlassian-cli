@@ -432,6 +432,12 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 
 	case *extAst.Table:
 		if entering {
+			for _, a := range n.Alignments {
+				if a == extAst.AlignCenter || a == extAst.AlignRight {
+					r.warn("table column alignment not supported in ADF (center/right alignment dropped)")
+					break
+				}
+			}
 			r.push(&adfNode{Type: "table"})
 		} else {
 			r.pop()
