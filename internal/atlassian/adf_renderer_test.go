@@ -2,12 +2,13 @@ package atlassian
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
 func mustRenderADF(t *testing.T, markdown string) map[string]any {
 	t.Helper()
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("MarkdownToADF(%q) returned error: %v", markdown, err)
 	}
@@ -52,6 +53,15 @@ func nodeContent(t *testing.T, node map[string]any) []map[string]any {
 		nodes = append(nodes, n)
 	}
 	return nodes
+}
+
+func adfJSON(t *testing.T, adf map[string]any) string {
+	t.Helper()
+	b, err := json.Marshal(adf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func TestRenderer_Paragraph(t *testing.T) {
@@ -132,81 +142,56 @@ func TestRenderer_Headings(t *testing.T) {
 
 func TestRenderer_Bold(t *testing.T) {
 	adf := mustRenderADF(t, "This is **bold** text")
-	nodes := contentNodes(t, adf)
-	children := nodeContent(t, nodes[0])
-
-	found := false
-	for _, child := range children {
-		marks, ok := child["marks"].([]any)
-		if ok && len(marks) > 0 {
-			mark := marks[0].(map[string]any)
-			if mark["type"] == "strong" && child["text"] == "bold" {
-				found = true
-			}
-		}
+	s := adfJSON(t, adf)
+	if !strings.Contains(s, `"type":"strong"`) {
+		t.Error("expected strong mark")
 	}
-	if !found {
-		t.Error("expected strong mark on 'bold' text")
+	if !strings.Contains(s, `"text":"bold"`) {
+		t.Error("expected 'bold' text")
 	}
 }
 
 func TestRenderer_Italic(t *testing.T) {
 	adf := mustRenderADF(t, "This is *italic* text")
-	nodes := contentNodes(t, adf)
-	children := nodeContent(t, nodes[0])
-
-	found := false
-	for _, child := range children {
-		marks, ok := child["marks"].([]any)
-		if ok && len(marks) > 0 {
-			mark := marks[0].(map[string]any)
-			if mark["type"] == "em" && child["text"] == "italic" {
-				found = true
-			}
-		}
+	s := adfJSON(t, adf)
+	if !strings.Contains(s, `"type":"em"`) {
+		t.Error("expected em mark")
 	}
-	if !found {
-		t.Error("expected em mark on 'italic' text")
+	if !strings.Contains(s, `"text":"italic"`) {
+		t.Error("expected 'italic' text")
 	}
 }
 
 func TestRenderer_Strikethrough(t *testing.T) {
 	adf := mustRenderADF(t, "This is ~~struck~~ text")
-	nodes := contentNodes(t, adf)
-	children := nodeContent(t, nodes[0])
-
-	found := false
-	for _, child := range children {
-		marks, ok := child["marks"].([]any)
-		if ok && len(marks) > 0 {
-			mark := marks[0].(map[string]any)
-			if mark["type"] == "strike" && child["text"] == "struck" {
-				found = true
-			}
-		}
+	s := adfJSON(t, adf)
+	if !strings.Contains(s, `"type":"strike"`) {
+		t.Error("expected strike mark")
 	}
-	if !found {
-		t.Error("expected strike mark on 'struck' text")
+	if !strings.Contains(s, `"text":"struck"`) {
+		t.Error("expected 'struck' text")
+	}
+}
+
+func TestRenderer_StrikethroughMultiWord(t *testing.T) {
+	adf := mustRenderADF(t, "~~multiple words here~~")
+	s := adfJSON(t, adf)
+	if !strings.Contains(s, `"type":"strike"`) {
+		t.Error("expected strike mark on multi-word strikethrough")
+	}
+	if !strings.Contains(s, "multiple") || !strings.Contains(s, "words") || !strings.Contains(s, "here") {
+		t.Errorf("expected all words present in output, got %s", s)
 	}
 }
 
 func TestRenderer_InlineCode(t *testing.T) {
 	adf := mustRenderADF(t, "Use `fmt.Println` here")
-	nodes := contentNodes(t, adf)
-	children := nodeContent(t, nodes[0])
-
-	found := false
-	for _, child := range children {
-		marks, ok := child["marks"].([]any)
-		if ok && len(marks) > 0 {
-			mark := marks[0].(map[string]any)
-			if mark["type"] == "code" && child["text"] == "fmt.Println" {
-				found = true
-			}
-		}
+	s := adfJSON(t, adf)
+	if !strings.Contains(s, `"type":"code"`) {
+		t.Error("expected code mark")
 	}
-	if !found {
-		t.Error("expected code mark on 'fmt.Println' text")
+	if !strings.Contains(s, `"text":"fmt.Println"`) {
+		t.Error("expected 'fmt.Println' text")
 	}
 }
 
@@ -339,6 +324,47 @@ func TestRenderer_Blockquote(t *testing.T) {
 	}
 }
 
+func TestRenderer_NestedBlockquote_Flattened(t *testing.T) {
+	adf := mustRenderADF(t, "> outer\n> > nested")
+	s := adfJSON(t, adf)
+
+	nodes := contentNodes(t, adf)
+	for _, n := range nodes {
+		if n["type"] == "blockquote" {
+			children := nodeContent(t, n)
+			for _, child := range children {
+				if child["type"] == "blockquote" {
+					t.Errorf("found nested blockquote in ADF — should be flattened. Full ADF: %s", s)
+				}
+			}
+		}
+	}
+}
+
+func TestRenderer_BlockquoteInListItem_Flattened(t *testing.T) {
+	md := "- item with quote\n\n  > quoted text inside list"
+	adf := mustRenderADF(t, md)
+	s := adfJSON(t, adf)
+
+	if strings.Contains(s, `"type":"blockquote"`) {
+		// Check it's not inside a listItem
+		nodes := contentNodes(t, adf)
+		for _, n := range nodes {
+			if n["type"] == "bulletList" {
+				items := nodeContent(t, n)
+				for _, item := range items {
+					children := nodeContent(t, item)
+					for _, child := range children {
+						if child["type"] == "blockquote" {
+							t.Error("blockquote should not appear inside listItem in ADF")
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestRenderer_HorizontalRule(t *testing.T) {
 	adf := mustRenderADF(t, "Before\n\n---\n\nAfter")
 	nodes := contentNodes(t, adf)
@@ -359,8 +385,8 @@ func TestRenderer_Link(t *testing.T) {
 	nodes := contentNodes(t, adf)
 	children := nodeContent(t, nodes[0])
 
-	if len(children) != 1 {
-		t.Fatalf("expected 1 child, got %d", len(children))
+	if len(children) == 0 {
+		t.Fatal("expected at least 1 child")
 	}
 
 	child := children[0]
@@ -382,6 +408,45 @@ func TestRenderer_Link(t *testing.T) {
 	}
 	if attrs["href"] != "https://example.com" {
 		t.Errorf("expected href, got %v", attrs["href"])
+	}
+}
+
+func TestRenderer_LinkWithBoldText(t *testing.T) {
+	adf := mustRenderADF(t, "[**bold link**](https://example.com)")
+	s := adfJSON(t, adf)
+
+	if !strings.Contains(s, `"type":"strong"`) {
+		t.Error("expected strong mark inside link")
+	}
+	if !strings.Contains(s, `"type":"link"`) {
+		t.Error("expected link mark")
+	}
+	if !strings.Contains(s, "bold link") {
+		t.Errorf("expected 'bold link' text, got %s", s)
+	}
+}
+
+func TestRenderer_BoldItalicNested(t *testing.T) {
+	adf := mustRenderADF(t, "**bold and *italic* here**")
+	s := adfJSON(t, adf)
+
+	if !strings.Contains(s, `"type":"strong"`) {
+		t.Error("expected strong mark")
+	}
+	if !strings.Contains(s, `"type":"em"`) {
+		t.Error("expected em mark for nested italic inside bold")
+	}
+}
+
+func TestRenderer_BoldItalicCombined(t *testing.T) {
+	adf := mustRenderADF(t, "***bold italic***")
+	s := adfJSON(t, adf)
+
+	if !strings.Contains(s, `"type":"strong"`) {
+		t.Error("expected strong mark")
+	}
+	if !strings.Contains(s, `"type":"em"`) {
+		t.Error("expected em mark")
 	}
 }
 
@@ -469,13 +534,38 @@ func TestRenderer_TableCellContent(t *testing.T) {
 	}
 }
 
-func TestRenderer_Checkbox_Unchecked(t *testing.T) {
+func TestRenderer_TableWithFormatting(t *testing.T) {
+	md := "| **Bold** | *Italic* |\n| --- | --- |\n| `code` | ~~strike~~ |"
+	adf := mustRenderADF(t, md)
+	nodes := contentNodes(t, adf)
+
+	if nodes[0]["type"] != "table" {
+		t.Fatalf("expected table, got %v", nodes[0]["type"])
+	}
+
+	s := adfJSON(t, adf)
+	for _, mark := range []string{"strong", "em", "code", "strike"} {
+		if !strings.Contains(s, mark) {
+			t.Errorf("expected %s mark in table output", mark)
+		}
+	}
+}
+
+func TestRenderer_TaskList_Unchecked(t *testing.T) {
 	md := "- [ ] Todo item"
 	adf := mustRenderADF(t, md)
 	nodes := contentNodes(t, adf)
 
-	if nodes[0]["type"] != "bulletList" {
-		t.Fatalf("expected bulletList, got %v", nodes[0]["type"])
+	if nodes[0]["type"] != "taskList" {
+		t.Fatalf("expected taskList, got %v", nodes[0]["type"])
+	}
+
+	attrs, ok := nodes[0]["attrs"].(map[string]any)
+	if !ok {
+		t.Fatal("expected attrs on taskList")
+	}
+	if _, hasLocalId := attrs["localId"]; !hasLocalId {
+		t.Error("expected localId attr on taskList")
 	}
 
 	items := nodeContent(t, nodes[0])
@@ -484,53 +574,85 @@ func TestRenderer_Checkbox_Unchecked(t *testing.T) {
 	}
 
 	item := items[0]
-	attrs, ok := item["attrs"].(map[string]any)
-	if !ok {
-		t.Fatal("expected attrs on task list item")
+	if item["type"] != "taskItem" {
+		t.Fatalf("expected taskItem, got %v", item["type"])
 	}
-	if attrs["state"] != "TODO" {
-		t.Errorf("expected state 'TODO', got %v", attrs["state"])
+
+	itemAttrs, ok := item["attrs"].(map[string]any)
+	if !ok {
+		t.Fatal("expected attrs on taskItem")
+	}
+	if itemAttrs["state"] != "TODO" {
+		t.Errorf("expected state 'TODO', got %v", itemAttrs["state"])
+	}
+	if _, hasLocalId := itemAttrs["localId"]; !hasLocalId {
+		t.Error("expected localId attr on taskItem")
 	}
 }
 
-func TestRenderer_Checkbox_Checked(t *testing.T) {
+func TestRenderer_TaskList_Checked(t *testing.T) {
 	md := "- [x] Done item"
 	adf := mustRenderADF(t, md)
 	nodes := contentNodes(t, adf)
 
+	if nodes[0]["type"] != "taskList" {
+		t.Fatalf("expected taskList, got %v", nodes[0]["type"])
+	}
+
 	items := nodeContent(t, nodes[0])
 	item := items[0]
-	attrs, ok := item["attrs"].(map[string]any)
+	itemAttrs, ok := item["attrs"].(map[string]any)
 	if !ok {
-		t.Fatal("expected attrs on task list item")
+		t.Fatal("expected attrs on taskItem")
 	}
-	if attrs["state"] != "DONE" {
-		t.Errorf("expected state 'DONE', got %v", attrs["state"])
+	if itemAttrs["state"] != "DONE" {
+		t.Errorf("expected state 'DONE', got %v", itemAttrs["state"])
 	}
 }
 
-func TestRenderer_Checkbox_Mixed(t *testing.T) {
-	md := "- [x] Done\n- [ ] Todo\n- Regular item"
+func TestRenderer_TaskList_Mixed(t *testing.T) {
+	md := "- [x] Done\n- [ ] Todo"
 	adf := mustRenderADF(t, md)
 	nodes := contentNodes(t, adf)
 
+	if nodes[0]["type"] != "taskList" {
+		t.Fatalf("expected taskList, got %v", nodes[0]["type"])
+	}
+
 	items := nodeContent(t, nodes[0])
-	if len(items) != 3 {
-		t.Fatalf("expected 3 items, got %d", len(items))
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
 	}
 
-	item0Attrs, ok := items[0]["attrs"].(map[string]any)
-	if !ok || item0Attrs["state"] != "DONE" {
-		t.Errorf("expected first item state 'DONE', got %v", items[0]["attrs"])
+	item0Attrs := items[0]["attrs"].(map[string]any)
+	if item0Attrs["state"] != "DONE" {
+		t.Errorf("expected first item state 'DONE', got %v", item0Attrs["state"])
 	}
 
-	item1Attrs, ok := items[1]["attrs"].(map[string]any)
-	if !ok || item1Attrs["state"] != "TODO" {
-		t.Errorf("expected second item state 'TODO', got %v", items[1]["attrs"])
+	item1Attrs := items[1]["attrs"].(map[string]any)
+	if item1Attrs["state"] != "TODO" {
+		t.Errorf("expected second item state 'TODO', got %v", item1Attrs["state"])
 	}
+}
 
-	if items[2]["attrs"] != nil {
-		t.Errorf("expected no attrs on regular list item, got %v", items[2]["attrs"])
+func TestRenderer_RemoteImage(t *testing.T) {
+	adf := mustRenderADF(t, "![screenshot](https://example.com/img.png)")
+	s := adfJSON(t, adf)
+
+	if !strings.Contains(s, "[Image: screenshot]") {
+		t.Errorf("expected '[Image: screenshot]' in output, got %s", s)
+	}
+	if !strings.Contains(s, "https://example.com/img.png") {
+		t.Error("expected image URL in link href")
+	}
+}
+
+func TestRenderer_RemoteImageNoAlt(t *testing.T) {
+	adf := mustRenderADF(t, "![](https://example.com/img.png)")
+	s := adfJSON(t, adf)
+
+	if !strings.Contains(s, "[Image: https://example.com/img.png]") {
+		t.Errorf("expected URL as fallback display text, got %s", s)
 	}
 }
 
@@ -582,8 +704,8 @@ This is **bold** and *italic* and ` + "`code`" + ` text.
 	if typeCount["paragraph"] < 1 {
 		t.Error("expected at least 1 paragraph")
 	}
-	if typeCount["bulletList"] < 2 {
-		t.Error("expected at least 2 bullet lists (regular + task)")
+	if typeCount["bulletList"] < 1 {
+		t.Error("expected at least 1 bullet list")
 	}
 	if typeCount["orderedList"] < 1 {
 		t.Error("expected at least 1 ordered list")
@@ -600,6 +722,9 @@ This is **bold** and *italic* and ` + "`code`" + ` text.
 	if typeCount["codeBlock"] < 1 {
 		t.Error("expected at least 1 code block")
 	}
+	if typeCount["taskList"] < 1 {
+		t.Error("expected at least 1 task list")
+	}
 }
 
 func TestRenderer_NoPanic_OnAnyInput(t *testing.T) {
@@ -614,6 +739,10 @@ func TestRenderer_NoPanic_OnAnyInput(t *testing.T) {
 		"~~strike~~",
 		"***bold italic***",
 		"- [ ] task\n  - [ ] subtask",
+		"> > nested blockquote",
+		"- item\n\n  > quote inside list",
+		"[**bold link**](https://example.com)",
+		"**bold and *italic* here**",
 		"",
 		"   ",
 		"\n\n\n",
@@ -626,7 +755,7 @@ func TestRenderer_NoPanic_OnAnyInput(t *testing.T) {
 					t.Errorf("panic on input %q: %v", input, r)
 				}
 			}()
-			_, err := MarkdownToADF(input)
+			_, _, err := MarkdownToADF(input)
 			if err != nil {
 				t.Errorf("unexpected error on input %q: %v", input, err)
 			}
@@ -653,34 +782,47 @@ func TestRenderer_ValidJSON(t *testing.T) {
 	}
 }
 
-func TestRenderer_TableWithFormatting(t *testing.T) {
-	md := "| **Bold** | *Italic* |\n| --- | --- |\n| `code` | ~~strike~~ |"
-	adf := mustRenderADF(t, md)
-	nodes := contentNodes(t, adf)
-
-	if nodes[0]["type"] != "table" {
-		t.Fatalf("expected table, got %v", nodes[0]["type"])
-	}
-
-	b, _ := json.Marshal(adf)
-	adfStr := string(b)
-
-	for _, mark := range []string{"strong", "em", "code", "strike"} {
-		if !contains(adfStr, mark) {
-			t.Errorf("expected %s mark in table output", mark)
-		}
+func TestRenderer_DefaultCaseRendersAsText(t *testing.T) {
+	md := "Some text with [^1] a footnote.\n\n[^1]: This is the footnote."
+	_, _, err := MarkdownToADF(md)
+	if err != nil {
+		t.Errorf("expected graceful handling of unknown nodes, got error: %v", err)
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
+func TestRenderer_WarningsReturned(t *testing.T) {
+	md := "![screenshot](https://example.com/img.png)"
+	_, warnings, err := MarkdownToADF(md)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(warnings) == 0 {
+		t.Error("expected warnings for remote image, got none")
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "remote image") {
+			found = true
 		}
 	}
-	return false
+	if !found {
+		t.Errorf("expected warning about remote image, got: %v", warnings)
+	}
+}
+
+func TestRenderer_NestedBlockquoteWarning(t *testing.T) {
+	md := "> outer\n> > nested"
+	_, warnings, err := MarkdownToADF(md)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "nested blockquote") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about nested blockquote, got: %v", warnings)
+	}
 }

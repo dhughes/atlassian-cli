@@ -806,7 +806,10 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 
 		// Update the issue description with inline images
 		if len(mediaNodes) > 0 {
-			adf, err := atlassian.MarkdownToADFWithImages(description, mediaNodes)
+			adf, warnings, err := atlassian.MarkdownToADFWithImages(description, mediaNodes)
+			for _, w := range warnings {
+				fmt.Printf("Warning: %s\n", w)
+			}
 			if err != nil {
 				fmt.Printf("Warning: failed to build ADF with images: %v\n", err)
 			} else {
@@ -971,14 +974,19 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 			}
 
 			// Convert cleaned markdown to ADF with media nodes
-			adf, err := atlassian.MarkdownToADFWithImages(cleanedDesc, mediaNodes)
+			adf, warnings, err := atlassian.MarkdownToADFWithImages(cleanedDesc, mediaNodes)
+			for _, w := range warnings {
+				fmt.Printf("Warning: %s\n", w)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to convert description to ADF: %w", err)
 			}
 			fields["description"] = adf
 		} else {
-			// No images - standard markdown to ADF conversion
-			adf, err := atlassian.MarkdownToADF(jiraEditDescription)
+			adf, warnings, err := atlassian.MarkdownToADF(jiraEditDescription)
+			for _, w := range warnings {
+				fmt.Printf("Warning: %s\n", w)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to convert description to ADF: %w", err)
 			}

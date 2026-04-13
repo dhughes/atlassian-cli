@@ -281,9 +281,12 @@ func (c *Client) CreateJiraIssue(opts *CreateIssueOptions) (map[string]any, erro
 	// Add optional fields
 	if opts.Description != "" {
 		// Convert markdown description to ADF format
-		adf, err := MarkdownToADF(opts.Description)
+		adf, warnings, err := MarkdownToADF(opts.Description)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert description to ADF: %w", err)
+		}
+		for _, w := range warnings {
+			fmt.Printf("Warning: %s\n", w)
 		}
 		fields["description"] = adf
 	}

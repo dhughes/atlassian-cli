@@ -8,19 +8,21 @@ import (
 	"strings"
 )
 
-// MarkdownToADF converts markdown text to Atlassian Document Format (ADF)
-func MarkdownToADF(markdown string) (map[string]any, error) {
-	b, err := renderMarkdownToADF([]byte(markdown))
+// MarkdownToADF converts markdown text to Atlassian Document Format (ADF).
+// It returns the ADF document, any conversion warnings (unsupported features
+// that were rendered as plain text fallbacks), and an error if conversion fails.
+func MarkdownToADF(markdown string) (map[string]any, []string, error) {
+	b, warnings, err := renderMarkdownToADF([]byte(markdown))
 	if err != nil {
-		return nil, err
+		return nil, warnings, err
 	}
 
 	var adf map[string]any
 	if err := json.Unmarshal(b, &adf); err != nil {
-		return nil, err
+		return nil, warnings, err
 	}
 
-	return adf, nil
+	return adf, warnings, nil
 }
 
 // ImageRef represents a local image reference found in markdown
@@ -128,20 +130,20 @@ func BuildMediaSingleNode(mediaID, altText string) map[string]any {
 // the end. The mediaNodes slice must be indexed to match the placeholders
 // produced by ExtractLocalImages (i.e., mediaNodes[0] corresponds to
 // ATLIMG_PLACEHOLDER_0, etc.).
-func MarkdownToADFWithImages(markdown string, mediaNodes []map[string]any) (map[string]any, error) {
+func MarkdownToADFWithImages(markdown string, mediaNodes []map[string]any) (map[string]any, []string, error) {
 	images, cleaned := ExtractLocalImages(markdown)
 	_ = images // images are used by the caller to upload files
 
-	adf, err := MarkdownToADF(cleaned)
+	adf, warnings, err := MarkdownToADF(cleaned)
 	if err != nil {
-		return nil, err
+		return nil, warnings, err
 	}
 
 	if len(mediaNodes) > 0 {
 		adf["content"] = replacePlaceholdersInContent(adf["content"], mediaNodes)
 	}
 
-	return adf, nil
+	return adf, warnings, nil
 }
 
 // replacePlaceholdersInContent walks the top-level ADF content array and

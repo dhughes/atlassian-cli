@@ -8,7 +8,7 @@ import (
 
 func TestMarkdownToADF_SimpleParagraph(t *testing.T) {
 	markdown := "Hello world"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -32,7 +32,7 @@ func TestMarkdownToADF_SimpleParagraph(t *testing.T) {
 
 func TestMarkdownToADF_Heading(t *testing.T) {
 	markdown := "# Main Title"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -50,7 +50,7 @@ func TestMarkdownToADF_Heading(t *testing.T) {
 
 func TestMarkdownToADF_BoldText(t *testing.T) {
 	markdown := "This is **bold** text"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -62,7 +62,7 @@ func TestMarkdownToADF_BoldText(t *testing.T) {
 
 func TestMarkdownToADF_ItalicText(t *testing.T) {
 	markdown := "This is *italic* text"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -76,7 +76,7 @@ func TestMarkdownToADF_BulletList(t *testing.T) {
 	markdown := `- Item 1
 - Item 2
 - Item 3`
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -90,7 +90,7 @@ func TestMarkdownToADF_OrderedList(t *testing.T) {
 	markdown := `1. First
 2. Second
 3. Third`
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -102,7 +102,7 @@ func TestMarkdownToADF_OrderedList(t *testing.T) {
 
 func TestMarkdownToADF_CodeBlock(t *testing.T) {
 	markdown := "```go\nfunc main() {}\n```"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -114,7 +114,7 @@ func TestMarkdownToADF_CodeBlock(t *testing.T) {
 
 func TestMarkdownToADF_InlineCode(t *testing.T) {
 	markdown := "This is `inline code` text"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -126,7 +126,7 @@ func TestMarkdownToADF_InlineCode(t *testing.T) {
 
 func TestMarkdownToADF_Link(t *testing.T) {
 	markdown := "[Example](https://example.com)"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -138,7 +138,7 @@ func TestMarkdownToADF_Link(t *testing.T) {
 
 func TestMarkdownToADF_Blockquote(t *testing.T) {
 	markdown := "> This is a quote"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -150,7 +150,7 @@ func TestMarkdownToADF_Blockquote(t *testing.T) {
 
 func TestMarkdownToADF_EmptyString(t *testing.T) {
 	markdown := ""
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error for empty string, got %v", err)
 	}
@@ -181,7 +181,7 @@ func TestMarkdownToADF_ComplexDocument(t *testing.T) {
 		"	println(\"Hello\")\n" +
 		"}\n" +
 		"```\n"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -385,7 +385,7 @@ func TestBuildMediaSingleNode_NoAlt(t *testing.T) {
 }
 
 func TestMarkdownToADFWithImages_NoMedia(t *testing.T) {
-	adf, err := MarkdownToADFWithImages("Hello world", nil)
+	adf, _, err := MarkdownToADFWithImages("Hello world", nil)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -406,7 +406,7 @@ func TestMarkdownToADFWithImages_WithMedia(t *testing.T) {
 	// Each placeholder on its own line becomes its own paragraph in ADF.
 	markdown := "Some text\n\nATLIMG_PLACEHOLDER_0\n\nMore text\n\nATLIMG_PLACEHOLDER_1"
 
-	adf, err := MarkdownToADFWithImages(markdown, mediaNodes)
+	adf, _, err := MarkdownToADFWithImages(markdown, mediaNodes)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
