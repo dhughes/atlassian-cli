@@ -335,6 +335,12 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 	case *ast.List:
 		if entering {
 			if !n.IsOrdered() && listHasTaskChildren(n) {
+				// If we're inside a taskItem, pop it first so the nested
+				// taskList becomes a sibling in the parent taskList (Jira
+				// requires nested taskLists as siblings, not children).
+				if r.current().Type == "taskItem" {
+					r.pop()
+				}
 				r.push(&adfNode{
 					Type:  "taskList",
 					Attrs: map[string]any{"localId": ""},
@@ -359,7 +365,13 @@ func (r *adfRenderer) walkNode(source []byte, node ast.Node, entering bool) (ast
 				r.push(&adfNode{Type: "listItem"})
 			}
 		} else {
-			r.pop()
+			// Only pop if current is still a taskItem/listItem. When a
+			// nested task list is encountered, the taskItem is popped early
+			// (in the List handler above), so we must not double-pop.
+			cur := r.current().Type
+			if cur == "taskItem" || cur == "listItem" {
+				r.pop()
+			}
 		}
 
 	case *ast.Blockquote:
