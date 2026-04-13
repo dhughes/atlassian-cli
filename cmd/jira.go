@@ -3,7 +3,14 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/doughughes/atlassian-cli/internal/atlassian"
 	"github.com/doughughes/atlassian-cli/internal/config"
@@ -777,13 +784,31 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 
 	key, _ := result["key"].(string)
 
-	// If there are local images, upload them and update the description with inline media
+	// If there are images, upload them and update the description with inline media
+	var imageCount int
 	if len(imageRefs) > 0 {
 		var mediaNodes []map[string]any
 
 		for _, img := range imageRefs {
+			filePath := img.FilePath
+			var tmpPath string
+
+			// Download remote images to a temp file first
+			if img.Remote {
+				var err error
+				tmpPath, err = downloadImageToTemp(img.FilePath)
+				if err != nil {
+					fmt.Printf("Warning: %v\n", err)
+					continue
+				}
+				filePath = tmpPath
+			}
+
 			// Upload the image as attachment
-			attachments, err := client.AddAttachment(key, img.FilePath)
+			attachments, err := client.AddAttachment(key, filePath)
+			if tmpPath != "" {
+				os.Remove(tmpPath)
+			}
 			if err != nil {
 				fmt.Printf("Warning: failed to upload %s: %v\n", img.FilePath, err)
 				continue
@@ -802,11 +827,15 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 			}
 
 			mediaNodes = append(mediaNodes, atlassian.BuildMediaSingleNode(mediaID, img.AltText))
+			imageCount++
 		}
 
 		// Update the issue description with inline images
 		if len(mediaNodes) > 0 {
-			adf, err := atlassian.MarkdownToADFWithImages(description, mediaNodes)
+			adf, warnings, err := atlassian.MarkdownToADFWithImages(description, mediaNodes)
+			for _, w := range warnings {
+				fmt.Printf("Warning: %s\n", w)
+			}
 			if err != nil {
 				fmt.Printf("Warning: failed to build ADF with images: %v\n", err)
 			} else {
@@ -839,8 +868,8 @@ func runJiraCreateIssue(cmd *cobra.Command, args []string) error {
 
 		fmt.Printf("✓ Created issue: %s\n", key)
 		fmt.Printf("  ID: %s\n", id)
-		if len(imageRefs) > 0 {
-			fmt.Printf("  Images: %d attached inline\n", len(imageRefs))
+		if imageCount > 0 {
+			fmt.Printf("  Images: %d attached inline\n", imageCount)
 		}
 		fmt.Printf("  Link: %s\n", webURL)
 		fmt.Printf("\nView details: atl jira get-issue %s\n", key)
@@ -949,10 +978,44 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 		imageRefs, cleanedDesc := atlassian.ExtractLocalImages(jiraEditDescription)
 
 		if len(imageRefs) > 0 {
+			// Check existing attachments to avoid re-uploading
+			existing := getExistingAttachments(client, issueKey)
+
 			// Upload images and build media nodes
 			var mediaNodes []map[string]any
 			for _, img := range imageRefs {
-				attachments, err := client.AddAttachment(issueKey, img.FilePath)
+				filePath := img.FilePath
+				var tmpPath string
+
+				// Download remote images to a temp file first
+				if img.Remote {
+					var err error
+					tmpPath, err = downloadImageToTemp(img.FilePath)
+					if err != nil {
+						fmt.Printf("Warning: %v\n", err)
+						continue
+					}
+					filePath = tmpPath
+				}
+
+				// Check if this file was already uploaded
+				filename := filepath.Base(filePath)
+				if att, ok := existing[filename]; ok {
+					mediaID, err := client.GetAttachmentMediaID(att)
+					if tmpPath != "" {
+						os.Remove(tmpPath)
+					}
+					if err == nil {
+						mediaNodes = append(mediaNodes, atlassian.BuildMediaSingleNode(mediaID, img.AltText))
+						imageCount++
+						continue
+					}
+				}
+
+				attachments, err := client.AddAttachment(issueKey, filePath)
+				if tmpPath != "" {
+					os.Remove(tmpPath)
+				}
 				if err != nil {
 					fmt.Printf("Warning: failed to upload %s: %v\n", img.FilePath, err)
 					continue
@@ -971,14 +1034,19 @@ func runJiraEditIssue(cmd *cobra.Command, args []string) error {
 			}
 
 			// Convert cleaned markdown to ADF with media nodes
-			adf, err := atlassian.MarkdownToADFWithImages(cleanedDesc, mediaNodes)
+			adf, warnings, err := atlassian.MarkdownToADFWithImages(cleanedDesc, mediaNodes)
+			for _, w := range warnings {
+				fmt.Printf("Warning: %s\n", w)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to convert description to ADF: %w", err)
 			}
 			fields["description"] = adf
 		} else {
-			// No images - standard markdown to ADF conversion
-			adf, err := atlassian.MarkdownToADF(jiraEditDescription)
+			adf, warnings, err := atlassian.MarkdownToADF(jiraEditDescription)
+			for _, w := range warnings {
+				fmt.Printf("Warning: %s\n", w)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to convert description to ADF: %w", err)
 			}
@@ -1972,3 +2040,72 @@ func runJiraRemoveIssueLink(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// getExistingAttachments fetches the issue's attachments and returns a map of
+// filename → Attachment for the most recent upload of each filename.
+func getExistingAttachments(client *atlassian.Client, issueKey string) map[string]*atlassian.Attachment {
+	result := map[string]*atlassian.Attachment{}
+	issue, err := client.GetJiraIssue(issueKey, &atlassian.GetIssueOptions{
+		Fields: []string{"attachment"},
+	})
+	if err != nil {
+		return result
+	}
+	fields, _ := issue["fields"].(map[string]any)
+	attachments, _ := fields["attachment"].([]any)
+	for _, a := range attachments {
+		att, _ := a.(map[string]any)
+		filename, _ := att["filename"].(string)
+		id, _ := att["id"].(string)
+		content, _ := att["content"].(string)
+		if filename != "" && id != "" {
+			result[filename] = &atlassian.Attachment{
+				ID:       id,
+				Filename: filename,
+				Content:  content,
+			}
+		}
+	}
+	return result
+}
+
+// downloadImageToTemp downloads a remote image URL to a temporary file and
+// returns the path. The filename is derived from the URL so repeated downloads
+// of the same URL produce the same filename (enabling dedup). The caller is
+// responsible for removing the file.
+var imageDownloadClient = &http.Client{Timeout: 30 * time.Second}
+
+func downloadImageToTemp(rawURL string) (string, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid image URL %s: %w", rawURL, err)
+	}
+
+	resp, err := imageDownloadClient.Get(parsed.String())
+	if err != nil {
+		return "", fmt.Errorf("failed to download %s: %w", rawURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download %s: HTTP %d", rawURL, resp.StatusCode)
+	}
+
+	filename := path.Base(parsed.Path)
+	if filename == "" || filename == "." || filename == "/" {
+		filename = "remote-image.png"
+	}
+
+	tmpPath := filepath.Join(os.TempDir(), filename)
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to write image: %w", err)
+	}
+
+	return tmpPath, nil
+}

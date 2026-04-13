@@ -8,7 +8,7 @@ import (
 
 func TestMarkdownToADF_SimpleParagraph(t *testing.T) {
 	markdown := "Hello world"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -32,7 +32,7 @@ func TestMarkdownToADF_SimpleParagraph(t *testing.T) {
 
 func TestMarkdownToADF_Heading(t *testing.T) {
 	markdown := "# Main Title"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -50,7 +50,7 @@ func TestMarkdownToADF_Heading(t *testing.T) {
 
 func TestMarkdownToADF_BoldText(t *testing.T) {
 	markdown := "This is **bold** text"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -62,7 +62,7 @@ func TestMarkdownToADF_BoldText(t *testing.T) {
 
 func TestMarkdownToADF_ItalicText(t *testing.T) {
 	markdown := "This is *italic* text"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -76,7 +76,7 @@ func TestMarkdownToADF_BulletList(t *testing.T) {
 	markdown := `- Item 1
 - Item 2
 - Item 3`
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -90,7 +90,7 @@ func TestMarkdownToADF_OrderedList(t *testing.T) {
 	markdown := `1. First
 2. Second
 3. Third`
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -102,7 +102,7 @@ func TestMarkdownToADF_OrderedList(t *testing.T) {
 
 func TestMarkdownToADF_CodeBlock(t *testing.T) {
 	markdown := "```go\nfunc main() {}\n```"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -114,7 +114,7 @@ func TestMarkdownToADF_CodeBlock(t *testing.T) {
 
 func TestMarkdownToADF_InlineCode(t *testing.T) {
 	markdown := "This is `inline code` text"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -126,7 +126,7 @@ func TestMarkdownToADF_InlineCode(t *testing.T) {
 
 func TestMarkdownToADF_Link(t *testing.T) {
 	markdown := "[Example](https://example.com)"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -138,7 +138,7 @@ func TestMarkdownToADF_Link(t *testing.T) {
 
 func TestMarkdownToADF_Blockquote(t *testing.T) {
 	markdown := "> This is a quote"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -150,7 +150,7 @@ func TestMarkdownToADF_Blockquote(t *testing.T) {
 
 func TestMarkdownToADF_EmptyString(t *testing.T) {
 	markdown := ""
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error for empty string, got %v", err)
 	}
@@ -181,7 +181,7 @@ func TestMarkdownToADF_ComplexDocument(t *testing.T) {
 		"	println(\"Hello\")\n" +
 		"}\n" +
 		"```\n"
-	adf, err := MarkdownToADF(markdown)
+	adf, _, err := MarkdownToADF(markdown)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -220,27 +220,36 @@ func TestExtractLocalImages_NoImages(t *testing.T) {
 	}
 }
 
-func TestExtractLocalImages_URLsIgnored(t *testing.T) {
+func TestExtractLocalImages_RemoteURLsExtracted(t *testing.T) {
 	markdown := "![logo](https://example.com/logo.png)"
 	images, cleaned := ExtractLocalImages(markdown)
 
-	if len(images) != 0 {
-		t.Errorf("Expected 0 images (URLs should be ignored), got %d", len(images))
+	if len(images) != 1 {
+		t.Fatalf("Expected 1 image, got %d", len(images))
 	}
-	if cleaned != markdown {
-		t.Errorf("Expected cleaned to equal original for URL images, got %q", cleaned)
+	if !images[0].Remote {
+		t.Error("Expected image to be marked as Remote")
+	}
+	if images[0].FilePath != "https://example.com/logo.png" {
+		t.Errorf("Expected URL as FilePath, got %q", images[0].FilePath)
+	}
+	if cleaned != "ATLIMG_PLACEHOLDER_0" {
+		t.Errorf("Expected placeholder, got %q", cleaned)
 	}
 }
 
-func TestExtractLocalImages_HttpIgnored(t *testing.T) {
+func TestExtractLocalImages_HttpExtracted(t *testing.T) {
 	markdown := "![logo](http://example.com/logo.png)"
 	images, cleaned := ExtractLocalImages(markdown)
 
-	if len(images) != 0 {
-		t.Errorf("Expected 0 images (http URLs should be ignored), got %d", len(images))
+	if len(images) != 1 {
+		t.Fatalf("Expected 1 image, got %d", len(images))
 	}
-	if cleaned != markdown {
-		t.Errorf("Expected cleaned to equal original for http URL images, got %q", cleaned)
+	if !images[0].Remote {
+		t.Error("Expected image to be marked as Remote")
+	}
+	if cleaned != "ATLIMG_PLACEHOLDER_0" {
+		t.Errorf("Expected placeholder, got %q", cleaned)
 	}
 }
 
@@ -293,16 +302,21 @@ func TestExtractLocalImages_MixedContent(t *testing.T) {
 	markdown := "Text ![web](https://example.com/img.png) and ![local](" + imgPath + ") end"
 	images, cleaned := ExtractLocalImages(markdown)
 
-	if len(images) != 1 {
-		t.Fatalf("Expected 1 local image, got %d", len(images))
+	if len(images) != 2 {
+		t.Fatalf("Expected 2 images (1 remote + 1 local), got %d", len(images))
 	}
-	if images[0].FilePath != imgPath {
-		t.Errorf("Expected local image path, got %q", images[0].FilePath)
+	if !images[0].Remote {
+		t.Error("Expected first image to be remote")
+	}
+	if images[1].Remote {
+		t.Error("Expected second image to be local")
+	}
+	if images[1].FilePath != imgPath {
+		t.Errorf("Expected local image path, got %q", images[1].FilePath)
 	}
 
-	// URL image should be untouched
-	if cleaned != "Text ![web](https://example.com/img.png) and ATLIMG_PLACEHOLDER_0 end" {
-		t.Errorf("Expected mixed cleaned markdown, got %q", cleaned)
+	if cleaned != "Text ATLIMG_PLACEHOLDER_0 and ATLIMG_PLACEHOLDER_1 end" {
+		t.Errorf("Expected both placeholders, got %q", cleaned)
 	}
 }
 
@@ -326,6 +340,70 @@ func TestExtractLocalImages_EmptyAltText(t *testing.T) {
 	// Placeholder uses index regardless of alt text
 	if cleaned != "Image: ATLIMG_PLACEHOLDER_0" {
 		t.Errorf("Expected placeholder, got %q", cleaned)
+	}
+}
+
+func TestExtractLocalImages_ObsidianSyntax(t *testing.T) {
+	tmpDir := t.TempDir()
+	imgPath := filepath.Join(tmpDir, "screenshot.png")
+	if err := os.WriteFile(imgPath, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "See this: ![[" + imgPath + "]]"
+	images, cleaned := ExtractLocalImages(markdown)
+
+	if len(images) != 1 {
+		t.Fatalf("Expected 1 image from Obsidian syntax, got %d", len(images))
+	}
+	if images[0].FilePath != imgPath {
+		t.Errorf("Expected path %q, got %q", imgPath, images[0].FilePath)
+	}
+	if images[0].AltText != "screenshot.png" {
+		t.Errorf("Expected alt text from filename, got %q", images[0].AltText)
+	}
+	if cleaned != "See this: ATLIMG_PLACEHOLDER_0" {
+		t.Errorf("Expected placeholder, got %q", cleaned)
+	}
+}
+
+func TestExtractLocalImages_ObsidianNonexistent(t *testing.T) {
+	markdown := "![[/nonexistent/image.png]]"
+	images, cleaned := ExtractLocalImages(markdown)
+
+	if len(images) != 0 {
+		t.Errorf("Expected 0 images for nonexistent file, got %d", len(images))
+	}
+	if cleaned != markdown {
+		t.Errorf("Expected unchanged markdown, got %q", cleaned)
+	}
+}
+
+func TestExtractLocalImages_MixedStandardAndObsidian(t *testing.T) {
+	tmpDir := t.TempDir()
+	img1 := filepath.Join(tmpDir, "std.png")
+	img2 := filepath.Join(tmpDir, "obs.png")
+	if err := os.WriteFile(img1, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(img2, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "![standard](" + img1 + ") and ![[" + img2 + "]]"
+	images, cleaned := ExtractLocalImages(markdown)
+
+	if len(images) != 2 {
+		t.Fatalf("Expected 2 images, got %d", len(images))
+	}
+	if images[0].FilePath != img1 {
+		t.Errorf("Expected first image %q, got %q", img1, images[0].FilePath)
+	}
+	if images[1].FilePath != img2 {
+		t.Errorf("Expected second image %q, got %q", img2, images[1].FilePath)
+	}
+	if cleaned != "ATLIMG_PLACEHOLDER_0 and ATLIMG_PLACEHOLDER_1" {
+		t.Errorf("Expected both placeholders, got %q", cleaned)
 	}
 }
 
@@ -385,7 +463,7 @@ func TestBuildMediaSingleNode_NoAlt(t *testing.T) {
 }
 
 func TestMarkdownToADFWithImages_NoMedia(t *testing.T) {
-	adf, err := MarkdownToADFWithImages("Hello world", nil)
+	adf, _, err := MarkdownToADFWithImages("Hello world", nil)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -406,7 +484,7 @@ func TestMarkdownToADFWithImages_WithMedia(t *testing.T) {
 	// Each placeholder on its own line becomes its own paragraph in ADF.
 	markdown := "Some text\n\nATLIMG_PLACEHOLDER_0\n\nMore text\n\nATLIMG_PLACEHOLDER_1"
 
-	adf, err := MarkdownToADFWithImages(markdown, mediaNodes)
+	adf, _, err := MarkdownToADFWithImages(markdown, mediaNodes)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

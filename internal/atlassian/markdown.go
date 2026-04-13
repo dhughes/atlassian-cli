@@ -1,43 +1,45 @@
 package atlassian
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
-
-	"github.com/summonio/markdown-to-adf/renderer"
 )
 
-// MarkdownToADF converts markdown text to Atlassian Document Format (ADF)
-func MarkdownToADF(markdown string) (map[string]any, error) {
-	var buf bytes.Buffer
-
-	// Convert markdown to ADF using the renderer
-	if err := renderer.Render(&buf, []byte(markdown)); err != nil {
-		return nil, err
+// MarkdownToADF converts markdown text to Atlassian Document Format (ADF).
+// It returns the ADF document, any conversion warnings (unsupported features
+// that were rendered as plain text fallbacks), and an error if conversion fails.
+func MarkdownToADF(markdown string) (map[string]any, []string, error) {
+	b, warnings, err := renderMarkdownToADF([]byte(markdown))
+	if err != nil {
+		return nil, warnings, err
 	}
 
-	// Parse the ADF JSON
 	var adf map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &adf); err != nil {
-		return nil, err
+	if err := json.Unmarshal(b, &adf); err != nil {
+		return nil, warnings, err
 	}
 
-	return adf, nil
+	return adf, warnings, nil
 }
 
-// ImageRef represents a local image reference found in markdown
+// ImageRef represents an image reference found in markdown
 type ImageRef struct {
 	AltText  string // alt text from ![alt](path)
-	FilePath string // local file path
+	FilePath string // local file path (or remote URL if Remote is true)
 	Original string // original markdown syntax e.g. ![alt](path)
+	Remote   bool   // true if this is a remote URL (http/https)
 }
 
 // imageRegexp matches markdown image syntax: ![alt](path)
 var imageRegexp = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+
+// obsidianImageRegexp matches Obsidian wiki-link image syntax: ![[filename]]
+var obsidianImageRegexp = regexp.MustCompile(`!\[\[([^\]]+)\]\]`)
 
 // imagePlaceholderPrefix is used to create unique indexed placeholders that can
 // be located in the ADF tree after markdown conversion, allowing media nodes to
@@ -53,25 +55,36 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 	var images []ImageRef
 	cleaned := markdown
 
-	// First pass: collect all local images in forward order to assign indices
-	matches := imageRegexp.FindAllStringSubmatchIndex(markdown, -1)
 	type localMatch struct {
 		start, end int
 		altText    string
 		path       string
 		fullMatch  string
+		remote     bool
 	}
 	var locals []localMatch
-	for _, m := range matches {
+
+	// Standard markdown images: ![alt](path) or ![alt](path "title")
+	for _, m := range imageRegexp.FindAllStringSubmatchIndex(markdown, -1) {
 		altText := markdown[m[2]:m[3]]
 		path := markdown[m[4]:m[5]]
 
-		// Skip URLs
-		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-			continue
+		// Strip optional markdown title: ![alt](url "title") or ![alt](url 'title')
+		if idx := strings.IndexAny(path, `"'`); idx > 0 {
+			path = strings.TrimSpace(path[:idx])
 		}
 
-		// Only include if the file exists on disk
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			locals = append(locals, localMatch{
+				start:     m[0],
+				end:       m[1],
+				altText:   altText,
+				path:      path,
+				fullMatch: markdown[m[0]:m[1]],
+				remote:    true,
+			})
+			continue
+		}
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
@@ -85,16 +98,42 @@ func ExtractLocalImages(markdown string) ([]ImageRef, string) {
 		})
 	}
 
-	// Build images list and replace in reverse order to preserve indices
+	// Obsidian wiki-link images: ![[filename]]
+	for _, m := range obsidianImageRegexp.FindAllStringSubmatchIndex(markdown, -1) {
+		path := markdown[m[2]:m[3]]
+
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+
+		locals = append(locals, localMatch{
+			start:     m[0],
+			end:       m[1],
+			altText:   filepath.Base(path),
+			path:      path,
+			fullMatch: markdown[m[0]:m[1]],
+		})
+	}
+
+	// Sort by start position so indices are assigned in document order
+	sort.Slice(locals, func(i, j int) bool {
+		return locals[i].start < locals[j].start
+	})
+
 	images = make([]ImageRef, len(locals))
 	for i, lm := range locals {
 		images[i] = ImageRef{
 			AltText:  lm.altText,
 			FilePath: lm.path,
 			Original: lm.fullMatch,
+			Remote:   lm.remote,
 		}
 	}
 
+	// Replace in reverse order to preserve indices
 	for i := len(locals) - 1; i >= 0; i-- {
 		lm := locals[i]
 		placeholder := fmt.Sprintf("%s%d", imagePlaceholderPrefix, i)
@@ -134,20 +173,20 @@ func BuildMediaSingleNode(mediaID, altText string) map[string]any {
 // the end. The mediaNodes slice must be indexed to match the placeholders
 // produced by ExtractLocalImages (i.e., mediaNodes[0] corresponds to
 // ATLIMG_PLACEHOLDER_0, etc.).
-func MarkdownToADFWithImages(markdown string, mediaNodes []map[string]any) (map[string]any, error) {
+func MarkdownToADFWithImages(markdown string, mediaNodes []map[string]any) (map[string]any, []string, error) {
 	images, cleaned := ExtractLocalImages(markdown)
 	_ = images // images are used by the caller to upload files
 
-	adf, err := MarkdownToADF(cleaned)
+	adf, warnings, err := MarkdownToADF(cleaned)
 	if err != nil {
-		return nil, err
+		return nil, warnings, err
 	}
 
 	if len(mediaNodes) > 0 {
 		adf["content"] = replacePlaceholdersInContent(adf["content"], mediaNodes)
 	}
 
-	return adf, nil
+	return adf, warnings, nil
 }
 
 // replacePlaceholdersInContent walks the top-level ADF content array and
