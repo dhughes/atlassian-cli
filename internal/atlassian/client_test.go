@@ -772,3 +772,134 @@ func TestGetAttachmentMediaID_NoMediaIDInURL(t *testing.T) {
 		t.Errorf("Expected 'could not extract media ID' error, got %v", err)
 	}
 }
+
+func TestResolveURL(t *testing.T) {
+	client := NewClient("user@example.com", "token", "company.atlassian.net")
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"relative path", "/rest/api/3/myself", "https://company.atlassian.net/rest/api/3/myself"},
+		{"absolute https URL", "https://api.atlassian.com/oauth/token/accessible-resources", "https://api.atlassian.com/oauth/token/accessible-resources"},
+		{"absolute http URL", "http://internal.example.com/foo", "http://internal.example.com/foo"},
+		{"relative with query string", "/wiki/rest/api/content/1?status=historical&version=2", "https://company.atlassian.net/wiki/rest/api/content/1?status=historical&version=2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := client.ResolveURL(tt.path); got != tt.want {
+				t.Errorf("ResolveURL(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDo_SetsAuthAndDefaultAccept(t *testing.T) {
+	var capturedAuth, capturedAccept, capturedContentType, capturedBody, capturedMethod string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		capturedAccept = r.Header.Get("Accept")
+		capturedContentType = r.Header.Get("Content-Type")
+		capturedMethod = r.Method
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		w.Header().Set("X-Test", "yes")
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token123", server.URL)
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/whatever", strings.NewReader(`{"a":1}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	expectedAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("user@example.com:token123"))
+	if capturedAuth != expectedAuth {
+		t.Errorf("Authorization = %q, want %q", capturedAuth, expectedAuth)
+	}
+	if capturedAccept != "application/json" {
+		t.Errorf("Accept = %q, want application/json", capturedAccept)
+	}
+	if capturedContentType != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json (caller-set, should pass through)", capturedContentType)
+	}
+	if capturedMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", capturedMethod)
+	}
+	if capturedBody != `{"a":1}` {
+		t.Errorf("body = %q, want {\"a\":1}", capturedBody)
+	}
+	if resp.StatusCode != http.StatusTeapot {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusTeapot)
+	}
+	if string(respBody) != `{"ok":true}` {
+		t.Errorf("response body = %q, want {\"ok\":true}", string(respBody))
+	}
+	if resp.Header.Get("X-Test") != "yes" {
+		t.Errorf("response header X-Test = %q, want yes", resp.Header.Get("X-Test"))
+	}
+}
+
+func TestDo_OverwritesCallerAuthorization(t *testing.T) {
+	var capturedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token123", server.URL)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/x", nil)
+	req.Header.Set("Authorization", "Bearer attacker-controlled")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	resp.Body.Close()
+
+	expectedAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("user@example.com:token123"))
+	if capturedAuth != expectedAuth {
+		t.Errorf("Authorization = %q, want client-managed value %q", capturedAuth, expectedAuth)
+	}
+}
+
+func TestDo_RespectsCallerAccept(t *testing.T) {
+	var capturedAccept string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAccept = r.Header.Get("Accept")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient("user@example.com", "token", server.URL)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/x", nil)
+	req.Header.Set("Accept", "text/plain")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	resp.Body.Close()
+
+	if capturedAccept != "text/plain" {
+		t.Errorf("Accept = %q, want text/plain (caller-set, should not be overridden)", capturedAccept)
+	}
+}

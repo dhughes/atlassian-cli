@@ -47,6 +47,28 @@ func (c *Client) basicAuth() string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
+// ResolveURL returns an absolute URL for the given path. If path already starts
+// with http:// or https://, it is returned unchanged. Otherwise it is treated
+// as a path relative to the client's BaseURL.
+func (c *Client) ResolveURL(path string) string {
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	return c.BaseURL + path
+}
+
+// Do executes an HTTP request authenticated as this client. It sets the
+// Authorization header (overwriting any caller-supplied value) and defaults
+// Accept to application/json when the caller did not set it. The caller owns
+// reading and closing the response body.
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Authorization", c.basicAuth())
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/json")
+	}
+	return c.client.Do(req)
+}
+
 // doRequest performs an HTTP request with authentication
 func (c *Client) doRequest(method, url string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
