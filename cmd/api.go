@@ -142,16 +142,16 @@ func runAPI(cmd *cobra.Command, args []string) error {
 
 	// HTTP error: write the raw response body to stderr and exit 1 without
 	// letting main.go decorate it with "Error: ...". The body itself is the
-	// useful diagnostic — Atlassian returns structured JSON.
+	// useful diagnostic — Atlassian returns structured JSON. os.Exit skips
+	// the deferred Close above, which is fine — the OS reclaims the fd.
 	_, _ = io.Copy(os.Stderr, resp.Body)
-	resp.Body.Close()
 	os.Exit(1)
 	return nil
 }
 
-// readBody resolves the -d flag into a request body.
-// Returns (body, hasBody, error). hasBody is true when -d was set, even for
-// empty content, because that influences method defaulting.
+// readBody resolves the -d flag into a request body. Returns (body, hasBody,
+// error). An empty data string is treated as "no body" — callers wanting an
+// empty-body POST should pass an explicit -X POST.
 func readBody(data string, stdin io.Reader) (io.Reader, bool, error) {
 	if data == "" {
 		return nil, false, nil
@@ -189,9 +189,16 @@ func splitHeader(h string) (key, value string, ok bool) {
 	return key, value, true
 }
 
+// writeVerbose prints the outgoing method, URL, and headers to stderr.
+// It accounts for two headers injected by Client.Do after this point:
+// Authorization (always set, masked here) and Accept (defaulted to JSON when
+// the caller did not set it).
 func writeVerbose(method, url string, headers http.Header) {
 	fmt.Fprintf(os.Stderr, "> %s %s\n", method, url)
 	fmt.Fprintln(os.Stderr, "> Authorization: Basic [REDACTED]")
+	if headers.Get("Accept") == "" {
+		fmt.Fprintln(os.Stderr, "> Accept: application/json")
+	}
 	for _, k := range sortedHeaderKeys(headers) {
 		if strings.EqualFold(k, "Authorization") {
 			continue
